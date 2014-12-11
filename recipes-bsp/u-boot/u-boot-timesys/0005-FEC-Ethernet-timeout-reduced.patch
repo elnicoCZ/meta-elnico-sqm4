@@ -1,0 +1,27 @@
+From b969d69bfa8c50aa8e61a39c9381030961497f08 Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Thu, 11 Dec 2014 10:51:55 +0100
+Subject: [PATCH 5/5] FEC: Ethernet timeout reduced.
+
+Timeout reduction speeds up boot operation.
+(Since the timeout is very short, no connection is detected in u-boot!)
+---
+ include/configs/vybrid.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/include/configs/vybrid.h b/include/configs/vybrid.h
+index 47930ba..3f8e127 100644
+--- a/include/configs/vybrid.h
++++ b/include/configs/vybrid.h
+@@ -137,7 +137,7 @@
+ #	define CONFIG_SYS_FEC1_IOBASE	MACNET1_BASE_ADDR
+ #	define CONFIG_SYS_FEC0_MIIBASE	MACNET0_BASE_ADDR
+ #	define CONFIG_SYS_FEC1_MIIBASE	MACNET0_BASE_ADDR
+-#	define MCFFEC_TOUT_LOOP 50000
++#	define MCFFEC_TOUT_LOOP 1000
+ #	undef CONFIG_HAS_ETH1
+ 
+ #	define CONFIG_ETHADDR		00:e0:0c:bc:e5:60
+-- 
+1.9.3
+

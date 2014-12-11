@@ -1,0 +1,65 @@
+From 0314450637ac31f246f9c8412fbdab0500fd320f Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Thu, 11 Dec 2014 09:58:47 +0100
+Subject: [PATCH 2/5] DDR: DRAM size increased from 128MB to 256MB.
+
+Linux kernel takes the complete configuration from u-boot.
+User might only need to change the kernel arguments (bootargs) to mem=256M.
+---
+ board/freescale/vybrid/vybrid.c | 2 +-
+ include/configs/vybrid.h        | 4 ++--
+ include/configs/vybrid_iram.h   | 4 ++--
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/board/freescale/vybrid/vybrid.c b/board/freescale/vybrid/vybrid.c
+index d78fd88..983292a 100644
+--- a/board/freescale/vybrid/vybrid.c
++++ b/board/freescale/vybrid/vybrid.c
+@@ -213,7 +213,7 @@ unsigned long ddr_ctrl_init(void)
+ 	__raw_writel(0x01000000, DDR_CR072);	/* zqcs_rotate, no_zq_init */
+ 
+ 	/* DRAM controller misc */
+-	__raw_writel(0x0a010300, DDR_CR073);	/* arebit, col_diff, row_diff
++	__raw_writel(0x0a010200, DDR_CR073);	/* arebit, col_diff, row_diff
+ 						   bank_diff */
+ 	__raw_writel(0x0101ffff, DDR_CR074);	/* bank_split, addr_cmp_en
+ 						   cmd/age cnt */
+diff --git a/include/configs/vybrid.h b/include/configs/vybrid.h
+index 23297da..47930ba 100644
+--- a/include/configs/vybrid.h
++++ b/include/configs/vybrid.h
+@@ -199,11 +199,11 @@
+  * Stack sizes
+  * The stack sizes are set up in start.S using the settings below
+  */
+-#define CONFIG_STACKSIZE		(128 * 1024)	/* regular stack */
++#define CONFIG_STACKSIZE		(256 * 1024)	/* regular stack */
+ 
+ /* Physical Memory Map */
+ #define CONFIG_NR_DRAM_BANKS		1
+-#define PHYS_SDRAM_1_SIZE		(128 * 1024 * 1024)
++#define PHYS_SDRAM_1_SIZE		(256 * 1024 * 1024)
+ 
+ #define CONFIG_SYS_SDRAM_BASE		(0x80000000)
+ #define CONFIG_SYS_INIT_RAM_ADDR	(IRAM_BASE_ADDR)
+diff --git a/include/configs/vybrid_iram.h b/include/configs/vybrid_iram.h
+index 108fcec..b3745e9 100644
+--- a/include/configs/vybrid_iram.h
++++ b/include/configs/vybrid_iram.h
+@@ -199,11 +199,11 @@
+  *
+  * The stack sizes are set up in start.S using the settings below
+  */
+-#define CONFIG_STACKSIZE		(128 * 1024)	/* regular stack */
++#define CONFIG_STACKSIZE		(256 * 1024)	/* regular stack */
+ 
+ /* Physical Memory Map */
+ #define CONFIG_NR_DRAM_BANKS		1
+-#define PHYS_SDRAM_1_SIZE		(128 * 1024 * 1024)
++#define PHYS_SDRAM_1_SIZE		(256 * 1024 * 1024)
+ 
+ /*#define CONFIG_SYS_SDRAM_BASE		(PHYS_SDRAM_1)*/
+ /*#define CONFIG_SYS_SDRAM_BASE		(CONFIG_SYS_INIT_RAM_ADDR)*/
+-- 
+1.9.3
+
