@@ -1,0 +1,205 @@
+From d02c3a045617a86f7bceb78adbe4cd6b43678c3c Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Thu, 11 Dec 2014 17:04:55 +0100
+Subject: [PATCH 2/5] sgtl5000: Audio support ported for EasyBoard (pads and
+ clock fixed).
+
+---
+ arch/arm/mach-mvf/board-twr-vf700.c        |  4 ++-
+ arch/arm/mach-mvf/clock.c                  | 54 +++++++++++++++++++++++++++++-
+ arch/arm/mach-mvf/crm_regs.h               |  9 +++++
+ arch/arm/plat-mxc/include/mach/iomux-mvf.h | 14 ++++++--
+ 4 files changed, 77 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm/mach-mvf/board-twr-vf700.c b/arch/arm/mach-mvf/board-twr-vf700.c
+index adc769b..41092ba 100644
+--- a/arch/arm/mach-mvf/board-twr-vf700.c
++++ b/arch/arm/mach-mvf/board-twr-vf700.c
+@@ -147,7 +147,9 @@ static iomux_v3_cfg_t mvf600_pads[] = {
+ 	MVF600_PAD11_PTA21_SAI2_RX_BCLK,
+ 	MVF600_PAD12_PTA22_SAI2_RX_DATA,
+ 	MVF600_PAD13_PTA23_SAI2_RX_SYNC,
+-	MVF600_PAD40_PTB18_EXT_AUDIO_MCLK,
++	MVF600_PAD40_PTB18_CKO1,
++	MVF600_PAD5_PTA12_EXT_AUDIO_MCLK,
++	MVF600_PAD10_PTA20_STBY,
+ 
+ 	/*DCU0*/
+ 	MVF600_PAD30_PTB8_LCD_ENABLE,
+diff --git a/arch/arm/mach-mvf/clock.c b/arch/arm/mach-mvf/clock.c
+index b379923..dcf1353 100644
+--- a/arch/arm/mach-mvf/clock.c
++++ b/arch/arm/mach-mvf/clock.c
+@@ -1503,6 +1503,34 @@ static struct clk sai2_clk = {
+ 	.get_rate = _clk_sai2_get_rate,
+ };
+ 
++static unsigned long _clk_std_24mhz_get_rate(struct clk *clk)
++{
++	return 24000000;	// const
++}
++
++static unsigned long _clk_std_24mhz_round_rate(struct clk *clk,
++                                                unsigned long rate)
++{
++	u32 parent_rate = _clk_std_24mhz_get_rate(clk);
++	u32 div = parent_rate / rate;
++
++	/* Make sure rate is not greater than the maximum value for the clock.
++	 * Also prevent a div of 0.
++	 */
++	if (div == 0)
++		div++;
++	if (div > 8)
++		div = 8;
++	return parent_rate / div;
++}
++
++static struct clk std_24mhz_clk = {
++	__INIT_CLK_DEBUG(std_24mhz_clk)
++	.id = 0,
++	.round_rate = _clk_std_24mhz_round_rate,
++	.get_rate = _clk_std_24mhz_get_rate,
++};
++
+ static int _clk_enable1(struct clk *clk)
+ {
+ 	u32 reg;
+@@ -1535,14 +1563,24 @@ static int _clk_clko_set_parent(struct clk *clk, struct clk *parent)
+ 		sel = 3;
+ 	else if (parent == &pll4_audio_main_clk)
+ 		sel = 15;
++	else if (parent == &std_24mhz_clk)
++		sel = 0x39;
+ 	else
+ 		return -EINVAL;
++
++	reg = __raw_readl(MXC_CCM_CCOSR);
++	reg &= ~MXC_CCM_CCOSR_CKO1_SEL_MASK;
++	reg |= sel << MXC_CCM_CCOSR_CKO1_SEL_OFFSET;
++	__raw_writel(reg, MXC_CCM_CCOSR);
+ 	return 0;
+ }
+ 
+ static unsigned long _clk_clko_get_rate(struct clk *clk)
+ {
+-	return 0;
++	u32 reg = __raw_readl(MXC_CCM_CCOSR);
++	u32 div = ((reg & MXC_CCM_CCOSR_CKO1_DIV_MASK) >>
++			MXC_CCM_CCOSR_CKO1_DIV_OFFSET) + 1;
++	return clk_get_rate(clk->parent) / div;
+ }
+ 
+ static int _clk_clko_set_rate(struct clk *clk, unsigned long rate)
+@@ -1556,6 +1594,10 @@ static int _clk_clko_set_rate(struct clk *clk, unsigned long rate)
+ 	if (((parent_rate / div) != rate) || (div > 8))
+ 		return -EINVAL;
+ 
++	reg = __raw_readl(MXC_CCM_CCOSR);
++	reg &= ~MXC_CCM_CCOSR_CKO1_DIV_MASK;
++	reg |= (div - 1) << MXC_CCM_CCOSR_CKO1_DIV_OFFSET;
++	__raw_writel(reg, MXC_CCM_CCOSR);
+ 	return 0;
+ }
+ 
+@@ -1602,6 +1644,8 @@ static int _clk_clko2_set_rate(struct clk *clk, unsigned long rate)
+ static struct clk clko_clk = {
+ 	__INIT_CLK_DEBUG(clko_clk)
+ 	.parent = &pll2_528_bus_main_clk,
++	.enable_reg = MXC_CCM_CCOSR,
++	.enable_shift = MXC_CCM_CCOSR_CKO1_EN_OFFSET,
+ 	.enable = _clk_enable1,
+ 	.disable = _clk_disable1,
+ 	.set_parent = _clk_clko_set_parent,
+@@ -1928,6 +1972,8 @@ static struct clk_lookup lookups[] = {
+ 	_REGISTER_CLOCK(NULL, "asrc_clk", asrc_clk[0]),
+ 	_REGISTER_CLOCK(NULL, "asrc_serial_clk", asrc_clk[1]),
+  	_REGISTER_CLOCK(NULL, "caam_clk", caam_clk),
++	_REGISTER_CLOCK(NULL, "24mhz_clk", std_24mhz_clk),
++	_REGISTER_CLOCK(NULL, "clko_clk", clko_clk),
+ };
+ 
+ static void clk_tree_init(void)
+@@ -1955,6 +2001,7 @@ int __init mvf_clocks_init(unsigned long ckil, unsigned long osc,
+ {
+ 	__iomem void *base;
+ 	int i;
++	unsigned int reg;
+ 
+ 	external_low_reference = ckil;
+ 	external_high_reference = ckih1;
+@@ -2000,6 +2047,11 @@ int __init mvf_clocks_init(unsigned long ckil, unsigned long osc,
+ 	clk_set_parent(&dcu0_clk, &pll1_pfd2_452M);
+ 	clk_set_rate(&dcu0_clk, 113000000);
+ 
++	// audio source clock - 24 MHz
++	clk_set_parent(&clko_clk, &std_24mhz_clk);
++	clk_set_rate(&clko_clk, 24000000);
++	clk_enable(&clko_clk);
++
+ 	clk_set_parent(&sai2_clk, &audio_external_clk);
+ 	clk_set_rate(&sai2_clk, 24576000);
+ 
+diff --git a/arch/arm/mach-mvf/crm_regs.h b/arch/arm/mach-mvf/crm_regs.h
+index 57fac5b..515d8c9 100644
+--- a/arch/arm/mach-mvf/crm_regs.h
++++ b/arch/arm/mach-mvf/crm_regs.h
+@@ -199,6 +199,7 @@
+ #define MXC_CCM_CLPCR		(MXC_CCM_BASE + 0x2c)
+ #define MXC_CCM_CISR		(MXC_CCM_BASE + 0x30)
+ #define MXC_CCM_CIMR		(MXC_CCM_BASE + 0x34)
++#define MXC_CCM_CCOSR		(MXC_CCM_BASE + 0x38)
+ #define MXC_CCM_CGPR		(MXC_CCM_BASE + 0x3c)
+ #define MXC_CCM_CCGR0		(MXC_CCM_BASE + 0x40)
+ #define MXC_CCM_CCGR1		(MXC_CCM_BASE + 0x44)
+@@ -435,6 +436,14 @@
+ #define MXC_CCM_CIMR_LRF_PLL2		(1 << 1)
+ #define MXC_CCM_CIMR_LRF_PLL1		(1)
+ 
++/* Define the bits in register CCOSR */
++#define MXC_CCM_CCOSR_CKO1_EN_OFFSET            (10)
++#define MXC_CCM_CCOSR_CKO1_EN                   (0x1 << MXC_CCM_CCOSR_CKO1_EN_OFFSET)
++#define MXC_CCM_CCOSR_CKO1_DIV_OFFSET           (6)
++#define MXC_CCM_CCOSR_CKO1_DIV_MASK             (0xF << MXC_CCM_CCOSR_CKO1_DIV_OFFSET)
++#define MXC_CCM_CCOSR_CKO1_SEL_OFFSET           (0)
++#define MXC_CCM_CCOSR_CKO1_SEL_MASK             (0x3F << MXC_CCM_CCOSR_CKO1_SEL_OFFSET)
++
+ /* Define the bits in registers CGPR */
+ #define MXC_CCM_CGPR_EFUSE_PROG	(1 << 4)
+ #define MXC_CCM_CGPR_QSPI1_ACCZ		(1 << 1)
+diff --git a/arch/arm/plat-mxc/include/mach/iomux-mvf.h b/arch/arm/plat-mxc/include/mach/iomux-mvf.h
+index 0dd65c8..cf64267 100644
+--- a/arch/arm/plat-mxc/include/mach/iomux-mvf.h
++++ b/arch/arm/plat-mxc/include/mach/iomux-mvf.h
+@@ -55,6 +55,9 @@ typedef enum iomux_config {
+ #define MVF600_ESAI_PAD_CTRL	(PAD_CTL_DSE_50ohm | PAD_CTL_HYS | \
+ 		PAD_CTL_PKE | PAD_CTL_PUE | PAD_CTL_PUS_100K_UP)
+ 
++#define MVF600_CKO1_PAD_CTRL	(PAD_CTL_SPEED_LOW | PAD_CTL_OBE_ENABLE | \
++				PAD_CTL_DSE_50ohm)
++
+ #define MVF600_USB_PAD_CTRL	(PAD_CTL_HYS | PAD_CTL_PKE | PAD_CTL_PUE | \
+ 				PAD_CTL_DSE_50ohm)
+ 
+@@ -241,9 +244,16 @@ typedef enum iomux_config {
+ #define MVF600_PAD13_PTA23_SAI2_RX_SYNC			\
+ 		IOMUX_PAD(0x0034, 0x0034, 5, 0x036c, 0, \
+ 				MVF600_SAI_PAD_CTRL | PAD_CTL_IBE_ENABLE)
+-#define MVF600_PAD40_PTB18_EXT_AUDIO_MCLK		\
+-		IOMUX_PAD(0x00A0, 0x00A0, 2, 0x02ec, 2, \
++#define MVF600_PAD40_PTB18_CKO1				\
++		IOMUX_PAD(0x00A0, 0x00A0, 4, 0x0000, 0,	\
++				MVF600_CKO1_PAD_CTRL)
++#define MVF600_PAD5_PTA12_EXT_AUDIO_MCLK		\
++		IOMUX_PAD(0x0014, 0x0014, 2, 0x02ec, 1,	\
+ 				MVF600_SAI_PAD_CTRL | PAD_CTL_IBE_ENABLE)
++#define MVF600_PAD10_PTA20_STBY				\
++		IOMUX_PAD(0x0028, 0x0028, 0, 0x0000, 0,	\
++				MVF600_GPIO_GENERAL_CTRL | PAD_CTL_OBE_ENABLE)
++
+ 
+ /*DCU0*/
+ #define MVF600_PAD30_PTB8_LCD_ENABLE				\
+-- 
+1.9.3
+

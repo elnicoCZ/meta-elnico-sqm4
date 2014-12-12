@@ -1,0 +1,133 @@
+From 6ec0819a3129ea5583f2f419afa5b40f6398e139 Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Thu, 11 Dec 2014 16:54:42 +0100
+Subject: [PATCH 1/5] UART: UART pad definitions fixed, UART0 enabled, Quad SPI
+ disabled.
+
+---
+ arch/arm/mach-mvf/board-twr-vf700.c        | 42 ++++++++++++++++--------------
+ arch/arm/plat-mxc/include/mach/iomux-mvf.h | 19 +++++---------
+ 2 files changed, 29 insertions(+), 32 deletions(-)
+
+diff --git a/arch/arm/mach-mvf/board-twr-vf700.c b/arch/arm/mach-mvf/board-twr-vf700.c
+index 3c19b1c..adc769b 100644
+--- a/arch/arm/mach-mvf/board-twr-vf700.c
++++ b/arch/arm/mach-mvf/board-twr-vf700.c
+@@ -180,6 +180,10 @@ static iomux_v3_cfg_t mvf600_pads[] = {
+ 	MVF600_PAD132_PTE27_DCU0_B6,
+ 	MVF600_PAD133_PTE28_DCU0_B7,
+ 
++	/*UART0*/
++	MVF600_PAD32_PTB10_UART0_TX,
++	MVF600_PAD33_PTB11_UART0_RX,
++
+ 	/*UART1*/
+ 	MVF600_PAD26_PTB4_UART1_TX,
+ 	MVF600_PAD27_PTB5_UART1_RX,
+@@ -198,31 +202,28 @@ static iomux_v3_cfg_t mvf600_pads[] = {
+ 	MVF600_PAD24_PTB2_FTM0CH2,
+ 	MVF600_PAD25_PTB3_FTM0CH3,
+ 
+-	/*
+-	 * PTB6 & PTB7 are commented out as they conflict with uart2
+-	 * which is the MQX default console (e.g for printf)
+-	*/
+-	/* MVF600_PAD28_PTB6_FTM0CH6, */
+-	/* MVF600_PAD29_PTB7_FTM0CH7, */
+-
++	MVF600_PAD28_PTB6_FTM0CH6,
++	MVF600_PAD29_PTB7_FTM0CH7,
+ 	/*MVF600_PAD30_PTB8_FTM1CH0,*/
+ 	MVF600_PAD31_PTB9_FTM1CH1,
++
+ 	/* Touch Screen */
+ 	MVF600_PAD21_PTA31_TS_IRQ,
+ 
+-	/* Quad SPI */
+-	MVF600_PAD79_PTD0_QSPI0_A_SCK,
+-	MVF600_PAD80_PTD1_QSPI0_A_CS0,
+-	MVF600_PAD81_PTD2_QSPI0_A_D3,
+-	MVF600_PAD82_PTD3_QSPI0_A_D2,
+-	MVF600_PAD83_PTD4_QSPI0_A_D1,
+-	MVF600_PAD84_PTD5_QSPI0_A_D0,
+-	MVF600_PAD86_PTD7_QSPI0_B_SCK,
+-	MVF600_PAD87_PTD8_QSPI0_B_CS0,
+-	MVF600_PAD88_PTD9_QSPI0_B_D3,
+-	MVF600_PAD89_PTD10_QSPI0_B_D2,
+-	MVF600_PAD90_PTD11_QSPI0_B_D1,
+-	MVF600_PAD91_PTD12_QSPI0_B_D0,
++	/* Quad SPI is disabled, as pads PTD0 & PTD1 conflict with uart2
++	 * which is reserved for MQX console. */
++	/* MVF600_PAD79_PTD0_QSPI0_A_SCK, */
++	/* MVF600_PAD80_PTD1_QSPI0_A_CS0, */
++	/* MVF600_PAD81_PTD2_QSPI0_A_D3, */
++	/* MVF600_PAD82_PTD3_QSPI0_A_D2, */
++	/* MVF600_PAD83_PTD4_QSPI0_A_D1, */
++	/* MVF600_PAD84_PTD5_QSPI0_A_D0, */
++	/* MVF600_PAD86_PTD7_QSPI0_B_SCK, */
++	/* MVF600_PAD87_PTD8_QSPI0_B_CS0, */
++	/* MVF600_PAD88_PTD9_QSPI0_B_D3, */
++	/* MVF600_PAD89_PTD10_QSPI0_B_D2, */
++	/* MVF600_PAD90_PTD11_QSPI0_B_D1, */
++	/* MVF600_PAD91_PTD12_QSPI0_B_D0, */
+ };
+ 
+ static struct mxc_audio_platform_data mvf_twr_audio_data;
+@@ -263,6 +264,7 @@ static struct imxuart_platform_data mvf_uart0_pdata = {
+ static inline void mvf_vf700_init_uart(void)
+ {
+ 	mvf_add_imx_uart(1, &mvf_uart1_pdata);
++	mvf_add_imx_uart(0, &mvf_uart0_pdata);
+ }
+ 
+ static struct fec_platform_data fec_data __initdata = {
+diff --git a/arch/arm/plat-mxc/include/mach/iomux-mvf.h b/arch/arm/plat-mxc/include/mach/iomux-mvf.h
+index 449a439..0dd65c8 100644
+--- a/arch/arm/plat-mxc/include/mach/iomux-mvf.h
++++ b/arch/arm/plat-mxc/include/mach/iomux-mvf.h
+@@ -313,6 +313,7 @@ typedef enum iomux_config {
+ 		IOMUX_PAD(0x006C, 0x006C, 2, 0x037C, 0, \
+ 				MVF600_UART_PAD_CTRL | PAD_CTL_IBE_ENABLE)
+ 
++/*UART0*/
+ #define MVF600_PAD32_PTB10_UART0_TX				\
+ 		IOMUX_PAD(0x0080, 0x0080, 1, 0x0000, 0, \
+ 				MVF600_UART_PAD_CTRL | PAD_CTL_OBE_ENABLE)
+@@ -320,20 +321,14 @@ typedef enum iomux_config {
+ 		IOMUX_PAD(0x0084, 0x0084, 1, 0x0000, 0, \
+ 				MVF600_UART_PAD_CTRL | PAD_CTL_IBE_ENABLE)
+ 
+-#define MVF600_PAD28_PTB6_UART2_TX				\
+-		IOMUX_PAD(0x0070, 0x0070, 7, 0x038C, 0, \
++/*UART2*/
++#define MVF600_PAD79_PTD0_UART2_TX				\
++		IOMUX_PAD(0x013C, 0x013C, 2, 0x0000, 0, \
+ 				MVF600_UART_PAD_CTRL | PAD_CTL_OBE_ENABLE)
+-#define MVF600_PAD29_PTB7_UART2_RX				\
+-		IOMUX_PAD(0x0074, 0x0074, 7, 0x0388, 0, \
+-				MVF600_UART_PAD_CTRL | PAD_CTL_IBE_ENABLE)
+ 
+-#define MVF600_PAD10_PTA20_UART3_TX				\
+-		IOMUX_PAD(0x0028, 0x0028, 6, 0x0394, 0, \
+-				MVF600_UART_PAD_CTRL | PAD_CTL_OBE_ENABLE)
+-#define MVF600_PAD11_PTA21_UART3_RX				\
+-		IOMUX_PAD(0x002C, 0x002C, 6, 0x0390, 0, \
++#define MVF600_PAD80_PTD1_UART2_RX				\
++		IOMUX_PAD(0x0140, 0x0140, 2, 0x0000, 0, \
+ 				MVF600_UART_PAD_CTRL | PAD_CTL_IBE_ENABLE)
+-
+ /* FlexTimer channel pin */
+ #define MVF600_PAD22_PTB0_FTM0CH0		\
+ 		IOMUX_PAD(0x0058, 0x0058, 1, 0x0000, 0, MVF600_FTM0_CH_CTRL)
+@@ -358,7 +353,7 @@ typedef enum iomux_config {
+ 		IOMUX_PAD(0x0054, 0x0054, 0, 0x0000, 0, \
+ 				MVF600_GPIO_GENERAL_CTRL | PAD_CTL_IBE_ENABLE)
+ 
+-/*QSPI*/
++/* QSPI - not actually used, as it conflicts with uart2 */
+ #define MVF600_PAD79_PTD0_QSPI0_A_SCK                           \
+ 	IOMUX_PAD(0x013C, 0x013c, 1, 0x0000, 0, \
+ 			PAD_CTL_SPEED_HIGH | PAD_CTL_SRE_SLOW |	\
+-- 
+1.9.3
+

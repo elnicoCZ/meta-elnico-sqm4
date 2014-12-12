@@ -1,0 +1,124 @@
+From 700e9f0b42ad90864851be1482574ca4c373cfd4 Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Thu, 11 Dec 2014 17:17:30 +0100
+Subject: [PATCH 3/5] DCU: Support for 800x480 LCD added.
+
+Both resolutions are enabled at the same time. To pick the 800x480 LCD
+configuration, append the "frd7040tpt" string to the kernel parameters
+(u-boot bootargs variable).
+---
+ arch/arm/mach-mvf/board-twr-vf700.c | 11 ++++++++++-
+ drivers/video/mvf_dcu.c             | 30 ++++++++++++++++++++++++++++--
+ 2 files changed, 38 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/mach-mvf/board-twr-vf700.c b/arch/arm/mach-mvf/board-twr-vf700.c
+index 41092ba..1e42188 100644
+--- a/arch/arm/mach-mvf/board-twr-vf700.c
++++ b/arch/arm/mach-mvf/board-twr-vf700.c
+@@ -466,6 +466,15 @@ static void __init mvf_init_adc(void)
+ 	mvf_add_adc(0);
+ }
+ 
++static void __init mvf_init_dcu(void)
++{
++	if (NULL != strstr(saved_command_line, "frd7040tpt"))
++	{
++		mvf_dcu_pdata.mode_str = "800x480";
++	}
++	mvfa5_add_dcu(0, &mvf_dcu_pdata);
++}
++
+ /*!
+  * Board specific initialization.
+  */
+@@ -501,7 +510,7 @@ static void __init mvf_board_init(void)
+ 	mvf_add_qspi(0, &mvf_vf600_qspi_data);
+ 	spi_device_init();
+ 
+-	mvfa5_add_dcu(0, &mvf_dcu_pdata);
++	mvf_init_dcu();
+ 
+ 	mxc_register_device(&mvf_twr_audio_device, &mvf_twr_audio_data);
+ 	mvfa5_add_sai(2, &mvf_sai_pdata);
+diff --git a/drivers/video/mvf_dcu.c b/drivers/video/mvf_dcu.c
+index 036097b..e65dfae 100644
+--- a/drivers/video/mvf_dcu.c
++++ b/drivers/video/mvf_dcu.c
+@@ -37,9 +37,14 @@
+ 
+ #define DRIVER_NAME	"mvf-dcu"
+ 
++// PDI clock frequency, for computation of DCU clock divider
++// Dirty solution! This value should be read out from somewhere.
++#define PDI_CLCK_FREQ   200000000
++
+ static struct fb_videomode __devinitdata mvf_dcu_default_mode = {
+ 	.xres		= 480,
+ 	.yres		= 272,
++	.pixclock       = 100000,
+ 	.left_margin	= 2,
+ 	.right_margin	= 2,
+ 	.upper_margin	= 1,
+@@ -48,6 +53,7 @@ static struct fb_videomode __devinitdata mvf_dcu_default_mode = {
+ 	.vsync_len	= 2,
+ 	.sync		= FB_SYNC_COMP_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+ 	.vmode		= FB_VMODE_NONINTERLACED,
++	.flag           = 0,
+ };
+ 
+ static struct fb_videomode __devinitdata mvf_dcu_mode_db[] = {
+@@ -55,6 +61,7 @@ static struct fb_videomode __devinitdata mvf_dcu_mode_db[] = {
+ 		.name		= "480x272",
+ 		.xres		= 480,
+ 		.yres		= 272,
++		.pixclock       = 100000,
+ 		.left_margin	= 2,
+ 		.right_margin	= 2,
+ 		.upper_margin	= 1,
+@@ -63,6 +70,22 @@ static struct fb_videomode __devinitdata mvf_dcu_mode_db[] = {
+ 		.vsync_len	= 2,
+ 		.sync		= FB_SYNC_COMP_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+ 		.vmode		= FB_VMODE_NONINTERLACED,
++		.flag           = 0,
++	},
++	{
++		.name           = "800x480",
++		.xres           = 800,
++		.yres           = 480,
++		.pixclock       = 25000,
++		.left_margin    = 89,
++		.right_margin   = 164,
++		.upper_margin   = 23,
++		.lower_margin   = 10,
++		.hsync_len      = 10,
++		.vsync_len      = 10,
++		.sync           = FB_SYNC_COMP_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
++		.vmode          = FB_VMODE_NONINTERLACED,
++		.flag           = 0,
+ 	},
+ };
+ 
+@@ -380,7 +403,8 @@ static void update_lcdc(struct fb_info *info)
+ 	struct fb_var_screeninfo *var = &info->var;
+ 	struct mfb_info *mfbi = info->par;
+ 	struct mvf_dcu_fb_data *dcu = mfbi->parent;
+-
++	u32 n;
++	
+ 	if (mfbi->type == DCU_TYPE_OFF) {
+ 		mvf_dcu_disable_panel(info);
+ 		return;
+@@ -417,7 +441,9 @@ static void update_lcdc(struct fb_info *info)
+ 	writel(DCU_MODE_BLEND_ITER(3) | DCU_MODE_RASTER_EN(1),
+ 			dcu->base + DCU_DCU_MODE);
+ 
+-	writel(9, dcu->base + DCU_DIV_RATIO);
++	n = (((u32)PDI_CLCK_FREQ / 1000000) * var->pixclock) / 1000000;
++	printk(KERN_INFO "DCU: pixclock = %d, divider = %d\n", var->pixclock, n);
++	writel(n-1, dcu->base + DCU_DIV_RATIO);
+ 
+ 	writel(DCU_SYN_POL_INV_PXCK(0) | DCU_SYN_POL_NEG(0) |
+ 		DCU_SYN_POL_INV_VS(1) | DCU_SYN_POL_INV_HS(1),
+-- 
+1.9.3
+

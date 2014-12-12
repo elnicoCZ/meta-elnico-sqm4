@@ -1,0 +1,46 @@
+From cd2895f895bcfec198f5ff2f27d937a1191a0f4f Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Thu, 11 Dec 2014 17:36:15 +0100
+Subject: [PATCH 4/5] DMA: Ignore interrupts from DMA1, as it is reserved for
+ M4 (e.g. Wifi)!
+
+Since MQX 4.1.1, MQX does not use DMA0 (allowing e.g. for correct
+audio playback). It is probably also solved in newer kernels, but not
+in this old one. Now, Linux ignores DMA1 interrupts, allowing for proper
+DMA operation on M4, too (e.g. Wifi).
+---
+ drivers/dma/mvf_edma.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/dma/mvf_edma.c b/drivers/dma/mvf_edma.c
+index bbdcb82..b2a7a51 100644
+--- a/drivers/dma/mvf_edma.c
++++ b/drivers/dma/mvf_edma.c
+@@ -188,7 +188,10 @@ mcf_edma_isr(int irq, void *dev_id)
+ 	if (irq == MVF_INT_DMA0_TX) {
+ 		addr = mcf_edma_devp->dma_base_addr[0];
+ 	} else if (irq == MVF_INT_DMA1_TX) {
+-		addr = mcf_edma_devp->dma_base_addr[1];
++//		addr = mcf_edma_devp->dma_base_addr[1];
++		// DMA1 is reserved for the M4 core!
++		ERR("MVF_INT_DMA1_TX irq received - ignored (by SQM4)!");
++		return result;
+ 	} else {
+ 		ERR("Bad irq number at isr!\n");
+ 		return result;
+@@ -200,6 +203,12 @@ mcf_edma_isr(int irq, void *dev_id)
+ 			break;
+ 		}
+ 
++	if (channel == -1) {
++		ERR("Invalid channel %d. addr=0x%p, irq=%d, dev_id=%p, intr=0x%08X",
++			channel, addr, irq, dev_id, intr);
++		return result;
++	}
++
+ 	if (irq == MVF_INT_DMA1_TX)
+ 		channel += 32;
+ 
+-- 
+1.9.3
+
