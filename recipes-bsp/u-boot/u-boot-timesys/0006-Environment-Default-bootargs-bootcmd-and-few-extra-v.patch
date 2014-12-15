@@ -1,0 +1,43 @@
+From af42787889c79b10428ca7f3f3c031e1a97c09f1 Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Mon, 15 Dec 2014 10:46:58 +0100
+Subject: [PATCH] Environment: Default bootargs, bootcmd and few extra
+ variables defined.
+
+This is to allow automatic boot without need to set the variables manually.
+---
+ include/configs/vybrid.h | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/include/configs/vybrid.h b/include/configs/vybrid.h
+index 3f8e127..8c361dc 100644
+--- a/include/configs/vybrid.h
++++ b/include/configs/vybrid.h
+@@ -168,7 +168,7 @@
+ 
+ #define CONFIG_BOOTDELAY		3
+ #define CONFIG_ETHPRIME			"FEC0"
+-#define CONFIG_LOADADDR			0x80010000	/* loadaddr env var */
++#define CONFIG_LOADADDR			0x81000000	/* loadaddr env var */
+ #define CONFIG_ARP_TIMEOUT		200UL
+ 
+ /* Miscellaneous configurable options */
+@@ -276,4 +276,15 @@
+ #define CONFIG_ENV_IS_IN_MMC
+ #define CONFIG_SYS_MMC_ENV_DEV		0
+ 
++/* Environment configuration */
++#define CONFIG_EXTRA_ENV_SETTINGS						\
++	"kernel=uImage\0"							\
++	""
++
++#define CONFIG_BOOTARGS								\
++	"mem=256M console=ttymxc1,115200 root=/dev/mmcblk0p2 rw rootwait"
++
++#define CONFIG_BOOTCOMMAND							\
++	"fatload mmc 0:1 ${loadaddr} ${kernel}\;bootm ${loadaddr}"
++
+ #endif
+-- 
+1.9.3
+

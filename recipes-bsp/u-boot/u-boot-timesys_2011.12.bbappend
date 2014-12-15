@@ -6,6 +6,7 @@ SRC_URI = "git://github.com/Timesys/u-boot-timesys.git;protocol=git;branch=${SRC
            file://0002-DDR-DRAM-size-increased-from-128MB-to-256MB.patch \
            file://0003-DDR-DRAM-initialization-fixed-to-improve-its-stabili.patch \
            file://0004-UART-Enable-all-three-available-UART-channels.patch \
+           file://0006-Environment-Default-bootargs-bootcmd-and-few-extra-v.patch \
 "
 
 SRCREV = "da57bddb827ff0da2eb8da33b7081ff56d9dea2d"
