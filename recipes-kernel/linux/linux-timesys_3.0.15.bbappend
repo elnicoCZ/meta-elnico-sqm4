@@ -7,3 +7,5 @@ SRC_URI_append_sqm4vf6-eb = "file://0001-UART-UART-pad-definitions-fixed-UART0-e
                              file://0006-Logo-Custom-SQM4-bootup-logo-introduced.patch \
 "
 
+PR = "r1"
+
