@@ -1,0 +1,91 @@
+This is a short Quick Start Guide document listing a straight-forward process of building a custom Yocto-based Linux image for the SQM4-VF6-EasyBoard Development Kit. Purpose of this document is *NOT* to explain the Yocto workflow, nor to provide a reference manual. It only describes how to setup the environment in the minimum number of steps. For complete Yocto project documentation, please refer to https://www.yoctoproject.org/documentation.
+
+The SQM4-VF6-EasyBoard BSP is based on the Freescale TWR-VF65GS10 BSP, which is available at https://github.com/Freescale/fsl-community-bsp-platform, meta-fsl-arm and related Yocto layers. Customization of the BSP is provided by the meta-elnico-sqm4 layer, available at https://github.com/elnicoCZ/meta-elnico-sqm4.
+
+For more information on the SQM4 products, please visit http://www.sqm4.com.
+
+The general steps in this document are based on the Yocto Training document published at the Freescale's Community website (https://community.freescale.com/docs/DOC-94849).
+
+This document expects a working directory called "yocto", as signalized by "[yocto]$". Whenever the working directory changes during the process, it is signalized appropriately (e.g. "[fsl-community-bsp]$" after call to "cd fsl-community-bsp").
+
+=================================
+ 1. Install required packages ===
+=================================
+=== Fedora ===
+   [yocto]$ sudo yum install gawk make wget tar bzip2 gzip python unzip perl patch \
+              diffutils diffstat git cpp gcc gcc-c++ glibc-devel texinfo chrpath \
+              ccache SDL-devel xterm
+
+=== Ubuntu ===
+   [yocto]$ sudo apt-get install gawk wget git-core diffstat unzip texinfo \
+              build-essential chrpath libsdl1.2-dev xterm curl
+
+============================
+ 2. Install repo package ===
+============================
+   [yocto]$ sudo curl http://commondatastorage.googleapis.com/git-repo-downloads/repo > /usr/local/bin/repo
+   [yocto]$ chmod a+x /usr/local/bin/repo
+
+======================================
+ 3. Download Freescale BSP sources ===
+======================================
+   [yocto]$ mkdir fsl-community-bsp
+   [yocto]$ cd fsl-community-bsp
+   [fsl-community-bsp]$ repo init -u https://github.com/Freescale/fsl-community-bsp-platform -b dizzy
+   [fsl-community-bsp]$ repo sync
+
+=================================
+ 4. Download SQM4 BSP sources ===
+=================================
+   [fsl-community-bsp]$ cd sources
+   [sources]$ git clone https://github.com/elnicoCZ/meta-elnico-sqm4 -b dizzy
+
+===============================
+ 5. Setup build environment ===
+===============================
+   [sources]$ cd ..
+   [fsl-community-bsp]$ MACHINE=sqm4vf6-eb && source ./setup-environment build-sqm4vf6-eb
+   [build-sqm4vf6-eb]$
+
+=====================================
+ 6. Enable meta-elnico-sqm4 layer ===
+=====================================
+Open build-sqm4vf6-eb/conf/bblayers.conf in a text editor:
+   [build-sqm4vf6-eb]$ vi conf/bblayers.conf
+And append the following line to the BBLAYERS variable:
+${BSPDIR}/sources/meta-elnico-sqm4 \
+
+The resulting BBLAYERS variable should look like this:
+BBLAYERS = " \
+  ${BSPDIR}/sources/poky/meta \
+  ${BSPDIR}/sources/poky/meta-yocto \
+  \
+  ${BSPDIR}/sources/meta-openembedded/meta-oe \
+  ${BSPDIR}/sources/meta-openembedded/meta-multimedia \
+  \
+  ${BSPDIR}/sources/meta-fsl-arm \
+  ${BSPDIR}/sources/meta-fsl-arm-extra \
+  ${BSPDIR}/sources/meta-fsl-demos \
+  ${BSPDIR}/sources/meta-elnico-sqm4 \
+"
+
+======================
+ 7. Build an image ===
+======================
+Start with the smallest available image:
+   [build-sqm4vf6-eb]$ bitbake core-image-minimal
+
+=======================
+ 8. Prepare SD card ===
+=======================
+   [build-sqm4vf6-eb]$ cd tmp/deploy/images/sqm4vf6-eb
+In the following command, replace sdX with your SD card device name, e.g. sdc. Check dmesg.
+   [sqm4vf6-eb]$ sudo dd if=core-image-minimal-sqm4vf6-eb.sdcard of=/dev/sdX bs=1M
+   [sqm4vf6-eb]$ sync
+
+======================
+ 9. Evaluate image ===
+======================
+Insert the produced Micro-SD card in the corresponding slot of the SQM4-VF6-EasyBoard Development Kit and power on the device. The system will boot automatically. Use a serial cable attached to the Debug port to see u-boot and kernel standard output and to log in to the device console.
+Your first Yocto-based Linux image for SQM4-VF6-EasyBoard Development Kit is complete.
+

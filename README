@@ -10,3 +10,5 @@ URI: git://git.yoctoproject.org/meta-fsl-arm
 branch: dizzy
 revision: HEAD
 
+Please see README.quickstart to start with the project.
+
