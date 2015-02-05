@@ -1,0 +1,26 @@
+From 0591817b7fb96649aa5fcad18b7f881be0ed9442 Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Wed, 4 Feb 2015 14:44:18 +0100
+Subject: [PATCH] sgtl: sysclk fixed to equal the frequency of the input clock,
+ i.e. 24MHz exactly.
+
+---
+ sound/soc/mvf/mvf-sgtl5000.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sound/soc/mvf/mvf-sgtl5000.c b/sound/soc/mvf/mvf-sgtl5000.c
+index a5fb360..1af26ae 100644
+--- a/sound/soc/mvf/mvf-sgtl5000.c
++++ b/sound/soc/mvf/mvf-sgtl5000.c
+@@ -256,7 +256,7 @@ static int __devinit mvf_sgtl5000_probe(struct platform_device *pdev)
+ 	if (plat->init && plat->init())
+ 		return -EINVAL;
+ 
+-	card_priv.sysclk = 24576000;
++	card_priv.sysclk = 24000000;
+ 
+ 	return 0;
+ }
+-- 
+2.1.0
+
