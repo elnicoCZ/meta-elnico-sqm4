@@ -13,12 +13,13 @@ IMAGE_INSTALL = " \
     ${COMMON_INSTALL} \
     \
     ${QT_DEMOS} \
-    qt-in-industrial-embedded-smarthome-e \
+    easyduo \
     pciutils \
     usbutils \
     alsa-utils \
     ${TOUCH} \
     packagegroup-fsl-gstreamer \
     packagegroup-fsl-gstreamer-full \
+    packagegroup-core-ssh-openssh \
 "
 
