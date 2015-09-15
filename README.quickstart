@@ -89,3 +89,13 @@ In the following command, replace sdX with your SD card device name, e.g. sdc. C
 Insert the produced Micro-SD card in the corresponding slot of the SQM4-VF6-EasyBoard Development Kit and power on the device. The system will boot automatically. Use a serial cable attached to the Debug port to see u-boot and kernel standard output and to log in to the device console.
 Your first Yocto-based Linux image for SQM4-VF6-EasyBoard Development Kit is complete.
 
+======================
+ 10. Advanced demo ===
+======================
+There is a more complex demo image available, featuring display and audio support with Qt interface and multimedia playback. Build the easy-duo-demo-image by bitbake:
+   [build-sqm4vf6-eb]$ bitbake easy-duo-demo-image
+Then prepare the SD card:
+   [build-sqm4vf6-eb]$ cd tmp/deploy/images/sqm4vf6-eb
+   [sqm4vf6-eb]$ sudo dd if=easy-duo-demo-image-sqm4vf6-eb.sdcard of=/dev/sdX bs=1M
+   [sqm4vf6-eb]$ sync
+
