@@ -1,0 +1,31 @@
+From 18122df42d3d71bfbc133948dbcdef52690cd620 Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Tue, 1 Dec 2015 15:16:09 +0100
+Subject: [PATCH] NFC: 8-bit NAND patch (do not set the CONFIG_16BIT_MASK
+ flag).
+
+---
+ drivers/mtd/nand/fsl_nfc.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/mtd/nand/fsl_nfc.c b/drivers/mtd/nand/fsl_nfc.c
+index f84c785..225687a 100644
+--- a/drivers/mtd/nand/fsl_nfc.c
++++ b/drivers/mtd/nand/fsl_nfc.c
+@@ -916,11 +916,11 @@ fsl_nfc_probe(struct platform_device *pdev)
+ 			CONFIG_FAST_FLASH_MASK,
+ 			CONFIG_FAST_FLASH_SHIFT, 1);
+ #endif
+-
++#if 0
+ 	nfc_set_field(mtd, NFC_FLASH_CONFIG,
+ 			CONFIG_16BIT_MASK,
+ 			CONFIG_16BIT_SHIFT, 1);
+-
++#endif
+ 	/* Detect NAND chips */
+ 	if (nand_scan(mtd, 1)) {
+ 		printk(KERN_ERR DRV_NAME ": NAND Flash not found !\n");
+-- 
+2.1.0
+
