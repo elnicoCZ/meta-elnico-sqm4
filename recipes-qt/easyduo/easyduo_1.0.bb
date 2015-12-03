@@ -19,7 +19,7 @@ SRCREV_source = "c568215cc924bbde70388b41703820099826ecf3"
 SRC_URI[video1.md5sum] = "76d62a006824a5cad31be4668f542292"
 SRC_URI[video1.sha256sum] = "9d83eece38b9c8cfb126457a109b33943b11816d6a10da5641fb227c50b3c2ee"
 
-PR = "r1"
+PR = "r2"
 
 S = "${WORKDIR}/git/linux"
 
@@ -28,7 +28,7 @@ CFLAGS += ""
 FILES_${PN} += "${ROOT_HOME}/*"
 
 INITSCRIPT_NAME = "elnico-easyduo"
-INITSCRIPT_PARAMS = "start 99 5 ."
+INITSCRIPT_PARAMS = "start 99 2 3 4 5 ."
 
 COMPATIBLE_MACHINE = "(vf60)"
 
