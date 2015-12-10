@@ -1,0 +1,28 @@
+From 1b2c03f78b71a4f446df481fd456e4ac99097cd6 Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Thu, 10 Dec 2015 11:53:37 +0100
+Subject: [PATCH 2/2] sdhc: Consider the SD card to be always present - no CD
+ and WP pins used.
+
+This is useful in applications where the SD card presence is necessary
+and its removal causes fatal system failure. Then this setting avoids
+evaluation of the Card Detect pin (which is sometimes unreliable).
+---
+ arch/arm/mach-mvf/board-twr-vf700.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/mach-mvf/board-twr-vf700.c b/arch/arm/mach-mvf/board-twr-vf700.c
+index 44c4d52..5dad2e6 100644
+--- a/arch/arm/mach-mvf/board-twr-vf700.c
++++ b/arch/arm/mach-mvf/board-twr-vf700.c
+@@ -410,6 +410,7 @@ static void __init fixup_mxc_board(struct machine_desc *desc, struct tag *tags,
+ /*
+  * Not defined the cd/wp so far, set it always present for debug*/
+ static const struct esdhc_platform_data mvfa5_sd1_data __initconst = {
++	.always_present = 1,
+ 	.cd_gpio = MVF600_SD1_CD,
+ 	.wp_gpio = -1,
+ };
+-- 
+2.1.0
+
