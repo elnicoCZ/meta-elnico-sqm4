@@ -7,6 +7,6 @@ OpenEmbedded and/or Yocto.
 This layer depends on:
 
 URI: git://git.yoctoproject.org/meta-fsl-arm
-branch: dizzy
+branch: jethro
 revision: HEAD
 
