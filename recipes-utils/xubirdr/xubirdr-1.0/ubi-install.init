@@ -1,0 +1,75 @@
+#!/bin/sh
+
+do_install() {
+	XUBI_ADDR=""
+	XUBI_SIZE=""
+	UBI_PART=""
+
+	echo "*** UBI-INSTALL script started ***" > /dev/kmsg
+
+	# parse the "xubi" kernel argument (e.g. xubi=0x82000000,0xE000000)
+	# and "ubi_part" kernel argument (e.g. ubi_part=mtd_rootfs)
+	set -- $(cat /proc/cmdline)
+	for x in "$@"; do
+		case "$x" in
+		  xubi=*)
+			XUBI="${x#xubi=}"
+			XUBI_ADDR=$(echo $XUBI | cut -f 1 -d ,)
+			XUBI_SIZE=$(echo $XUBI | cut -f 2 -d ,)
+			;;
+		  ubi_part=*)
+			UBI_PART="${x#ubi_part=}"
+			;;
+		esac
+	done
+
+	# test for valid input (if "xubi" argument not given, we don't want to do anything)
+	if [ ${#XUBI_ADDR} -le 2 ] || [ ${#XUBI_SIZE} -le 2 ];
+	then
+		echo "Error: No valid \"xubi\" kernel argument provided. Terminating." > /dev/kmsg
+		exit 1
+	fi
+
+	# convert given mtd partition name to /dev/mtdX name
+	MTD=$(cat /proc/mtd | grep $UBI_PART | cut -f 1 -d :)
+	if [ ${#UBI_PART} -le 1 ];
+	then
+		echo "Error: No valid \"ubi_part\" kernel argument provided. Terminating." > /dev/kmsg
+		exit 2
+	fi
+
+	# store the size of the UBI image
+	SIZE=$(xubirdr -n -a $XUBI_ADDR -s $XUBI_SIZE)
+
+	# install UBI
+	if [ $? -eq 0 ];
+	then
+		echo "Fetching $SIZE bytes XUBI image from $XUBI_ADDR, installing to /dev/$MTD." > /dev/kmsg
+		xubirdr -a $XUBI_ADDR -s $XUBI_SIZE | ubiformat /dev/$MTD -y -f - -S $SIZE
+	else
+		echo "Error: Unable to fetch XUBI image from $XUBI_ADDR,$XUBI_SIZE" > /dev/kmsg
+		exit 3
+	fi
+
+	# we're done -> reboot the system
+	if [ $? -eq 0 ];
+	then
+		echo "Success. Rebooting." > /dev/kmsg
+		reboot
+	else
+		echo "Error: UBI image installation failed." > /dev/kmsg
+		exit 4
+	fi
+}
+
+case "$1" in
+  start)
+	do_install
+	;;
+
+  *)
+	echo "Usage: $0 start"
+	exit 9
+esac
+
+exit 0
