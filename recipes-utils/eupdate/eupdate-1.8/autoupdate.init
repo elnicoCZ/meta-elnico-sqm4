@@ -1,0 +1,76 @@
+#!/bin/sh
+
+kecho()
+{
+	echo "$@" > /dev/kmsg
+}
+
+do_update()
+{
+	EPD_PART=""
+
+	# parse the "epd_part" kernel argument (e.g. epd_part=mtd_data)
+	set -- $(cat /proc/cmdline)
+	for x in "$@"; do
+		case "$x" in
+			epd_part=*)
+			EPD_PART="${x#epd_part=}"
+			;;
+		esac
+	done
+
+	# test for "epd_part" kernel arg - if not provided, terminate
+	if [ ${#EPD_PART} -le 0 ];
+	then
+		echo "No \"epd_part\" kernel argument provided. Terminating."
+		exit 1
+	fi
+
+	# "epd_part" provided -> update trial requested
+	kecho "*** Starting AUTOUPDATE ***"
+
+	# convert given mtd partition name to /dev/mtdX name
+	MTD=$(cat /proc/mtd | grep $EPD_PART | cut -f 1 -d :)
+	if [ ${#MTD} -le 1 ];
+	then
+		kecho "Error: \"epd_part\" kernel argument is invalid. Terminating."
+		exit 2
+	fi
+
+	# read first 4 bytes to check for potentially valid data
+	# (if the partition was invalidated, there will be just zeros)
+	dd if=/dev/$MTD of=/tmp/autoupdate.mtd bs=4 count=1 2>/dev/null
+	dd if=/dev/zero of=/tmp/autoupdate.zero bs=4 count=1 2>/dev/null
+	cmp /tmp/autoupdate.mtd /tmp/autoupdate.zero >/dev/null; RET=$?
+	rm /tmp/autoupdate.mtd; rm /tmp/autoupdate.zero
+	if [ $RET -eq 0 ];
+	then
+		kecho "No valid epd data at /dev/$MTD partition. Terminating."
+		exit 3
+	fi
+
+	# try to update
+	kecho "Updating from the /dev/$MTD partition."
+	/etc/eupdate/eupdate /dev/$MTD > /dev/kmsg
+	[ $? -eq 0 ] && kecho "Update succeeded." || kecho "Update failed."
+
+	# in any case, invalidate the partition (clear the first block)
+	kecho "Invalidating the /dev/$MTD partition."
+	dd if=/dev/zero of=/dev/$MTD bs=2048 count=1 2>/dev/null
+
+	# reboot
+	kecho "Rebooting..."
+	reboot
+}
+
+case "$1" in
+  start)
+	do_update
+	;;
+
+  *)
+	echo "Usage: $0 start"
+	exit 9
+esac
+
+exit 0
