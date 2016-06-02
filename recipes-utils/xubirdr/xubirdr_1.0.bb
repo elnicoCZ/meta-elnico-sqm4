@@ -13,7 +13,7 @@ SRC_URI = "git://github.com/elnicoCZ/xubirdr.git \
 "
 SRCREV = "ddbe155ad6f6af0858406cd431fcb87526f2e025"
 
-PR = "r0"
+PR = "r1"
 
 S = "${WORKDIR}/git"
 

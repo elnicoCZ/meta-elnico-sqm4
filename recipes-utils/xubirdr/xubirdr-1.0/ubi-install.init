@@ -32,7 +32,7 @@ do_install() {
 
 	# convert given mtd partition name to /dev/mtdX name
 	MTD=$(cat /proc/mtd | grep $UBI_PART | cut -f 1 -d :)
-	if [ ${#UBI_PART} -le 1 ];
+	if [ ${#MTD} -le 1 ];
 	then
 		echo "Error: No valid \"ubi_part\" kernel argument provided. Terminating." > /dev/kmsg
 		exit 2
