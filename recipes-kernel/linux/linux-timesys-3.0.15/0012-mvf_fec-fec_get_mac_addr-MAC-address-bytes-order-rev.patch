@@ -1,0 +1,44 @@
+From c993a68940eec57adb7c994e08f8745733798af0 Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Thu, 28 Jul 2016 11:35:46 +0200
+Subject: [PATCH] mvf_fec: fec_get_mac_addr(): MAC address bytes order
+ reversed.
+
+According to multiple sources (RM, u-boot_v2016.01), the order of bytes,
+as organized in the 32bit ENETx_PALR and ENETx_PAUR register, should be
+left to right. Function fec_get_mac_addr() read it from right to left,
+resulting in reversed MAC address.
+
+Besides, it is confirmed by a mechanism which writes back the used MAC
+address to the ENETx_PAxR registers (not really sure where it is).
+---
+ arch/arm/mach-mvf/mvf_fec.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/arch/arm/mach-mvf/mvf_fec.c b/arch/arm/mach-mvf/mvf_fec.c
+index d51f205..219857f 100644
+--- a/arch/arm/mach-mvf/mvf_fec.c
++++ b/arch/arm/mach-mvf/mvf_fec.c
+@@ -35,13 +35,13 @@ static int fec_get_mac_addr(unsigned char *mac)
+ 	unsigned int value;
+ 
+ 	value = readl(MVF_IO_ADDRESS(MVF_FEC_BASE_ADDR) + ENET_PALR);
+-	mac[2] = value & 0xff;
+-	mac[3] = (value >> 8) & 0xff;
+-	mac[4] = (value >> 16) & 0xff;
+-	mac[5] = (value >> 24) & 0xff;
++	mac[0] = (value >> 24) & 0xff;
++	mac[1] = (value >> 16) & 0xff;
++	mac[2] = (value >> 8) & 0xff;
++	mac[3] = value & 0xff;
+ 	value = readl(MVF_IO_ADDRESS(MVF_FEC_BASE_ADDR) + ENET_PAUR);
+-	mac[0] = (value >> 16) & 0xff;
+-	mac[1] = (value >> 24) & 0xff;
++	mac[4] = (value >> 24) & 0xff;
++	mac[5] = (value >> 16) & 0xff;
+ 
+ 	return 0;
+ }
+-- 
+2.1.4
+
