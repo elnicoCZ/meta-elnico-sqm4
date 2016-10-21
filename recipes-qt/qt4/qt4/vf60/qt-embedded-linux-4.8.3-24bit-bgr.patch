@@ -1,0 +1,30 @@
+This patch reverses how Qt determines RGB from BGR for a 24 bit framebuffer.
+It is tested for Vybrid but untested in any other 24 bit framebuffer,
+--- qt-everywhere-opensource-src-4.8.3-orig/src/gui/embedded/qscreenlinuxfb_qws.cpp	2012-11-11 12:52:28.000000000 -0500
++++ qt-everywhere-opensource-src-4.8.3/src/gui/embedded/qscreenlinuxfb_qws.cpp	2012-11-11 12:33:42.000000000 -0500
+@@ -306,7 +306,6 @@
+ #endif
+         QScreen::setFrameBufferLittleEndian(true);
+ #endif
+-
+     QString dev = QLatin1String("/dev/fb0");
+     foreach(QString d, args) {
+ 	if (d.startsWith(QLatin1Char('/'))) {
+@@ -1312,10 +1311,17 @@
+         break;
+     }
+     case 24: {
++		/*
++			This is modified for Vybrid framebuffer (rgb and bgr switched)
+         const fb_bitfield rgb888[4] = {{16, 8, 0}, {8, 8, 0},
+                                        {0, 8, 0}, {0, 0, 0}};
+         const fb_bitfield bgr888[4] = {{0, 8, 0}, {8, 8, 0},
+                                        {16, 8, 0}, {0, 0, 0}};
++		*/
++        const fb_bitfield bgr888[4] = {{16, 8, 0}, {8, 8, 0},
++                                       {0, 8, 0}, {0, 0, 0}};
++        const fb_bitfield rgb888[4] = {{0, 8, 0}, {8, 8, 0},
++                                       {16, 8, 0}, {0, 0, 0}};
+         if (memcmp(rgba, rgb888, 3 * sizeof(fb_bitfield)) == 0) {
+             format = QImage::Format_RGB888;
+         } else if (memcmp(rgba, bgr888, 3 * sizeof(fb_bitfield)) == 0) {
