@@ -16,6 +16,7 @@ IMAGE_INSTALL = " \
     easyduo \
     pciutils \
     usbutils \
+    canutils \
     alsa-utils \
     ${TOUCH} \
     packagegroup-fsl-gstreamer \
