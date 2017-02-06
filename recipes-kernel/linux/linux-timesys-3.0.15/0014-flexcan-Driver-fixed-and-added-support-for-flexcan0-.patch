@@ -1,0 +1,390 @@
+From 28ba15e5292a040f1618343c9548504a5c88e720 Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Tue, 31 Jan 2017 09:39:32 +0100
+Subject: [PATCH] flexcan: Driver fixed and added support for flexcan0 and
+ flexcan1.
+
+Most of the changes took from the patch by Russell Robinson Jr
+<rrobinson@phytec.com>.
+(ftp://ftp.phytec.com/products/PCM-052_phyCORE-Vybrid/Linux/PD13.1.0/0002-mvf-fixed-flexcan-driver-and-added-support-for-flexc.patch)
+---
+ arch/arm/mach-mvf/board-twr-vf700.c          |   9 +-
+ arch/arm/mach-mvf/clock.c                    | 170 +++++++++++++++++++++++++++
+ arch/arm/mach-mvf/crm_regs.h                 |   8 ++
+ arch/arm/plat-mxc/devices/platform-flexcan.c |   9 ++
+ arch/arm/plat-mxc/include/mach/iomux-mvf.h   |  17 ++-
+ arch/arm/plat-mxc/include/mach/mvf.h         |   4 +-
+ drivers/net/can/flexcan.c                    |  14 +++
+ 7 files changed, 224 insertions(+), 7 deletions(-)
+
+diff --git a/arch/arm/mach-mvf/board-twr-vf700.c b/arch/arm/mach-mvf/board-twr-vf700.c
+index 5dad2e6..8cb693b 100644
+--- a/arch/arm/mach-mvf/board-twr-vf700.c
++++ b/arch/arm/mach-mvf/board-twr-vf700.c
+@@ -104,11 +104,10 @@ static iomux_v3_cfg_t mvf600_pads[] = {
+ 	
+ 	MVF600_PAD38_PTB16_USER_BTN1,
+ 
+-#if 0
+ 	/*CAN1*/
+ 	MVF600_PAD38_PTB16__CAN1_RX,
+ 	MVF600_PAD39_PTB17__CAN1_TX,
+-#endif
++
+ 	/*DSPI0*/
+ 	MVF600_PAD41_PTB19__DSPI0_PCS0,
+ 	MVF600_PAD42_PTB20__DSPI0_SIN,
+@@ -481,6 +480,10 @@ static void __init mvf_init_dcu(void)
+ 	mvfa5_add_dcu(0, &mvf_dcu_pdata);
+ }
+ 
++static const struct flexcan_platform_data mvf_flexcan1_pdata __initconst = {
++	.transceiver_switch = NULL,
++};
++
+ /*!
+  * Board specific initialization.
+  */
+@@ -521,6 +524,8 @@ static void __init mvf_board_init(void)
+ 	mxc_register_device(&mvf_twr_audio_device, &mvf_twr_audio_data);
+ 	mvfa5_add_sai(2, &mvf_sai_pdata);
+ 
++	mvf_add_flexcan1(&mvf_flexcan1_pdata);
++
+ 	mvf_add_wdt(0);
+ 
+ 	mvf_twr_init_usb();
+diff --git a/arch/arm/mach-mvf/clock.c b/arch/arm/mach-mvf/clock.c
+index dcf1353..c9e82bd 100644
+--- a/arch/arm/mach-mvf/clock.c
++++ b/arch/arm/mach-mvf/clock.c
+@@ -1708,6 +1708,172 @@ static struct clk i2c_clk[] = {
+ 	},
+ };
+ 
++static int _clk_can0_root_enable(struct clk *clk)
++{
++	u32 reg;
++
++	reg = __raw_readl(MXC_CCM_CSCDR2) | MXC_CCM_CSCDR2_CAN0_EN;
++	__raw_writel(reg, MXC_CCM_CSCDR2);
++
++	return 0;
++}
++
++static void _clk_can0_root_disable(struct clk *clk)
++{
++	u32 reg;
++
++	reg = __raw_readl(MXC_CCM_CSCDR2) & ~MXC_CCM_CSCDR2_CAN0_EN;
++	__raw_writel(reg, MXC_CCM_CSCDR2);
++}
++
++static int _clk_can0_root_set_parent(struct clk *clk, struct clk *parent)
++{
++	u32 reg;
++	int mux;
++
++	mux = _get_mux(parent, &osc_clk, &ipg_clk, NULL, NULL, NULL);
++	reg = __raw_readl(CAN0_CTRL1) & ~CAN_CTRL_CLKSRC;
++	reg |= mux << CAN_CTRL_CLKSRC_OFFSET;
++	__raw_writel(reg, CAN0_CTRL1);
++
++	return 0;
++}
++
++static struct clk can0_clk_root = {
++	__INIT_CLK_DEBUG(can0_clk_root)
++	.id = 0,
++	.parent = &ipg_clk,
++	.enable = _clk_can0_root_enable,
++	.disable = _clk_can0_root_disable,
++	.set_parent = _clk_can0_root_set_parent,
++};
++
++static struct clk can0_clk[] = {
++	{
++	__INIT_CLK_DEBUG(can0_clk_0)
++	.id = 0,
++	.parent = &can0_clk_root,
++	.enable_reg = MXC_CCM_CCGR0,
++	.enable_shift = MXC_CCM_CCGRx_CG0_OFFSET,
++	.enable = _clk_enable,
++	.disable = _clk_disable,
++	.secondary = &can0_clk[1],
++	.flags = AHB_HIGH_SET_POINT | CPU_FREQ_TRIG_UPDATE,
++	},
++	{
++	__INIT_CLK_DEBUG(can0_clk_1)
++	.id = 1,
++	.parent = &can0_clk_root,
++	.enable_reg = MXC_CCM_CCGR0,
++	.enable_shift = MXC_CCM_CCGRx_CG1_OFFSET,
++	.enable = _clk_enable,
++	.disable = _clk_disable,
++	.secondary = &can0_clk[2],
++	},
++	{
++	__INIT_CLK_DEBUG(can0_clk_2)
++	.id = 2,
++	.parent = &can0_clk_root,
++	.enable_reg = MXC_CCM_CCGR0,
++	.enable_shift = MXC_CCM_CCGRx_CG2_OFFSET,
++	.enable = _clk_enable,
++	.disable = _clk_disable,
++	.secondary = &can0_clk[3],
++	},
++	{
++	__INIT_CLK_DEBUG(can0_clk_3)
++	.id = 4,
++	.parent = &can0_clk_root,
++	.enable_reg = MXC_CCM_CCGR0,
++	.enable_shift = MXC_CCM_CCGRx_CG3_OFFSET,
++	.enable = _clk_enable,
++	.disable = _clk_disable,
++	},
++};
++
++static int _clk_can1_root_enable(struct clk *clk)
++{
++	u32 reg;
++
++	reg = __raw_readl(MXC_CCM_CSCDR2) | MXC_CCM_CSCDR2_CAN1_EN;
++	__raw_writel(reg, MXC_CCM_CSCDR2);
++
++	return 0;
++}
++
++static void _clk_can1_root_disable(struct clk *clk)
++{
++	u32 reg;
++
++	reg = __raw_readl(MXC_CCM_CSCDR2) & ~MXC_CCM_CSCDR2_CAN1_EN;
++	__raw_writel(reg, MXC_CCM_CSCDR2);
++}
++
++static int _clk_can1_root_set_parent(struct clk *clk, struct clk *parent)
++{
++
++	u32 reg;
++	int mux;
++
++	mux = _get_mux(parent, &osc_clk, &ipg_clk, NULL, NULL, NULL);
++	reg = __raw_readl(CAN1_CTRL1) & ~CAN_CTRL_CLKSRC;
++	reg |= mux << CAN_CTRL_CLKSRC_OFFSET;
++	__raw_writel(reg, CAN1_CTRL1);
++
++	return 0;
++}
++
++static struct clk can1_clk_root = {
++	__INIT_CLK_DEBUG(can1_root_clk)
++	.parent = &ipg_clk,
++	.enable = _clk_can1_root_enable,
++	.disable = _clk_can1_root_disable,
++	.set_parent = _clk_can1_root_set_parent,
++};
++
++static struct clk can1_clk[] = {
++	{
++	__INIT_CLK_DEBUG(can1_clk_0)
++	.id = 0,
++	.parent = &can1_clk_root,
++	.enable_reg = MXC_CCM_CCGR9,
++	.enable_shift = MXC_CCM_CCGRx_CG4_OFFSET,
++	.enable = _clk_enable,
++	.disable = _clk_disable,
++	.secondary = &can1_clk[1],
++	.flags = AHB_HIGH_SET_POINT | CPU_FREQ_TRIG_UPDATE,
++	},
++	{
++	__INIT_CLK_DEBUG(can1_clk_1)
++	.id = 1,
++	.parent = &can1_clk_root,
++	.enable_reg = MXC_CCM_CCGR9,
++	.enable_shift = MXC_CCM_CCGRx_CG5_OFFSET,
++	.enable = _clk_enable,
++	.disable = _clk_disable,
++	.secondary = &can1_clk[2],
++	},
++	{
++	__INIT_CLK_DEBUG(can1_clk_2)
++	.id = 2,
++	.parent = &can1_clk_root,
++	.enable_reg = MXC_CCM_CCGR9,
++	.enable_shift = MXC_CCM_CCGRx_CG6_OFFSET,
++	.enable = _clk_enable,
++	.disable = _clk_disable,
++	.secondary = &can1_clk[3],
++	},
++	{
++	__INIT_CLK_DEBUG(can1_clk_3)
++	.id = 3,
++	.parent = &can1_clk_root,
++	.enable_reg = MXC_CCM_CCGR9,
++	.enable_shift = MXC_CCM_CCGRx_CG7_OFFSET,
++	.enable = _clk_enable,
++	.disable = _clk_disable,
++	},
++};
++
+ static struct clk wdt_clk[] = {
+ 	{
+ 		__INIT_CLK_DEBUG(wdt_clk)
+@@ -1953,6 +2119,10 @@ static struct clk_lookup lookups[] = {
+ 	_REGISTER_CLOCK(NULL, "mvf-uart.1", uart_clk[0]),
+ 	_REGISTER_CLOCK(NULL, "mvf-uart.2", uart_clk[0]),
+ 	_REGISTER_CLOCK(NULL, "mvf-uart.3", uart_clk[0]),
++	_REGISTER_CLOCK(NULL, "can0_root_clk", can0_clk_root),
++	_REGISTER_CLOCK(NULL, "can1_root_clk", can1_clk_root),
++	_REGISTER_CLOCK("mvf-flexcan.0", NULL, can0_clk[0]),
++	_REGISTER_CLOCK("mvf-flexcan.1", NULL, can1_clk[0]),
+ 	_REGISTER_CLOCK("mvf-dspi.0", NULL, dspi_clk[0]),
+ 	_REGISTER_CLOCK("pit", NULL, pit_clk),
+ 	_REGISTER_CLOCK("fec.0", NULL, enet_clk[0]),
+diff --git a/arch/arm/mach-mvf/crm_regs.h b/arch/arm/mach-mvf/crm_regs.h
+index 515d8c9..b4788d5 100644
+--- a/arch/arm/mach-mvf/crm_regs.h
++++ b/arch/arm/mach-mvf/crm_regs.h
+@@ -38,6 +38,14 @@
+ #define DDRMC_MDMISC_DDR_TYPE_MASK	(0x7 << 8)
+ #define DDRMC_MDMISC_DDR_TYPE_OFFSET	(8)
+ 
++/* CAN */
++#define MXC_CAN0_BASE			MVF_IO_ADDRESS(MVF_CAN0_BASE_ADDR)
++#define CAN0_CTRL1			(MXC_CAN0_BASE + 0x4)
++#define MXC_CAN1_BASE			MVF_IO_ADDRESS(MVF_CAN1_BASE_ADDR)
++#define CAN1_CTRL1			(MXC_CAN1_BASE + 0x4)
++#define CAN_CTRL_CLKSRC			(1 << 13)
++#define CAN_CTRL_CLKSRC_OFFSET		(13)
++
+ /* PLLs */
+ #define MXC_PLL_BASE			MVF_IO_ADDRESS(ANADIG_BASE_ADDR)
+ #define PLL1_SYS_BASE_ADDR		(MXC_PLL_BASE + 0x270)
+diff --git a/arch/arm/plat-mxc/devices/platform-flexcan.c b/arch/arm/plat-mxc/devices/platform-flexcan.c
+index d660237..e7ebf4c 100644
+--- a/arch/arm/plat-mxc/devices/platform-flexcan.c
++++ b/arch/arm/plat-mxc/devices/platform-flexcan.c
+@@ -47,6 +47,15 @@ const struct imx_flexcan_data imx6q_flexcan_data[] __initconst = {
+ };
+ #endif /* ifdef CONFIG_SOC_IMX6Q*/
+ 
++#ifdef CONFIG_SOC_MVFA5
++const struct imx_flexcan_data mvf_flexcan_data[] __initconst = {
++#define mvf_flexcan_data_entry(_id, _hwid)                            \
++	imx_flexcan_data_entry(MVF, "mvf-flexcan", _id, _hwid, SZ_16K)
++	mvf_flexcan_data_entry(0, 0),
++	mvf_flexcan_data_entry(1, 1),
++};
++#endif /* ifdef CONFIG_SOC_MVFA5*/
++
+ struct platform_device *__init imx_add_flexcan(
+ 		const struct imx_flexcan_data *data,
+ 		const struct flexcan_platform_data *pdata)
+diff --git a/arch/arm/plat-mxc/include/mach/iomux-mvf.h b/arch/arm/plat-mxc/include/mach/iomux-mvf.h
+index 3d4c9a1..771259e 100644
+--- a/arch/arm/plat-mxc/include/mach/iomux-mvf.h
++++ b/arch/arm/plat-mxc/include/mach/iomux-mvf.h
+@@ -47,6 +47,9 @@ typedef enum iomux_config {
+ #define MVF600_ENET_PAD_CTRL	(PAD_CTL_PUS_47K_UP | PAD_CTL_SPEED_HIGH | \
+ 		PAD_CTL_DSE_50ohm)
+ 
++#define MVF600_CAN_PAD_CTRL	(PAD_CTL_PUS_100K_UP | PAD_CTL_SPEED_HIGH | \
++		PAD_CTL_DSE_20ohm)
++
+ #define MVF600_I2C_PAD_CTRL      (PAD_CTL_DSE_50ohm | PAD_CTL_PUS_47K_UP | PAD_CTL_SPEED_HIGH)
+ 
+ #define MVF600_SAI_PAD_CTRL	(PAD_CTL_DSE_50ohm | PAD_CTL_HYS | \
+@@ -109,12 +112,20 @@ typedef enum iomux_config {
+ #define MVF600_PAD38_PTB16_USER_BTN1			\
+ 		IOMUX_PAD(0x0098, 0x0098, 0, 0x0000, 0, \
+ 				MVF600_GPIO_GENERAL_CTRL | PAD_CTL_IBE_ENABLE)
+-				
++
++/*CAN0*/
++#define MVF600_PAD36_PTB14__CAN0_RX				\
++		IOMUX_PAD(0x0090, 0x0090, 1, 0x0000, 0, \
++				MVF600_CAN_PAD_CTRL | PAD_CTL_IBE_ENABLE)
++#define MVF600_PAD37_PTB15__CAN0_TX				\
++		IOMUX_PAD(0x0094, 0x0094, 1, 0x0000, 0, MVF600_CAN_PAD_CTRL)
++
+ /*CAN1*/
+ #define MVF600_PAD38_PTB16__CAN1_RX				\
+-		IOMUX_PAD(0x0098, 0x0098, 1, 0x0000, 0, 0)
++		IOMUX_PAD(0x0098, 0x0098, 1, 0x0000, 0, \
++				MVF600_CAN_PAD_CTRL | PAD_CTL_IBE_ENABLE)
+ #define MVF600_PAD39_PTB17__CAN1_TX				\
+-		IOMUX_PAD(0x009C, 0x009C, 1, 0x0000, 0, 0)
++		IOMUX_PAD(0x009C, 0x009C, 1, 0x0000, 0, MVF600_CAN_PAD_CTRL)
+ 
+ /*DSPI0*/
+ #define MVF600_PAD41_PTB19__DSPI0_PCS0				\
+diff --git a/arch/arm/plat-mxc/include/mach/mvf.h b/arch/arm/plat-mxc/include/mach/mvf.h
+index 95efcef..2120e86 100644
+--- a/arch/arm/plat-mxc/include/mach/mvf.h
++++ b/arch/arm/plat-mxc/include/mach/mvf.h
+@@ -124,7 +124,7 @@
+ #define MVF_DMA0TCD_BASE_ADDR	(MVF_AIPS0_BASE_ADDR + 0x00019000)
+ #define MVF_SEMA4_BASE_ADDR	(MVF_AIPS0_BASE_ADDR + 0x0001D000)
+ #define MVF_FLEXBUS_BASE_ADDR	(MVF_AIPS0_BASE_ADDR + 0x0001E000)
+-#define MVF_FLEXCAN0_BASE_ADDR	(MVF_AIPS0_BASE_ADDR + 0x00021000)
++#define MVF_CAN0_BASE_ADDR	(MVF_AIPS0_BASE_ADDR + 0x00020000)
+ #define MVF_DMAMUX0_BASE_ADDR	(MVF_AIPS0_BASE_ADDR + 0x00024000)
+ #define MVF_DMAMUX1_BASE_ADDR	(MVF_AIPS0_BASE_ADDR + 0x00025000)
+ #define MVF_UART0_BASE_ADDR	(MVF_AIPS0_BASE_ADDR + 0x00027000)
+@@ -236,7 +236,7 @@
+ #define MVF_OPENVG_BASE_ADDR	(MVF_AIPS1_BASE_ADDR - 0x80000 + 0x000CF000)
+ #define MVF_MAC0_BASE_ADDR	(MVF_AIPS1_BASE_ADDR - 0x80000 + 0x000D0000)
+ #define MVF_MAC1_BASE_ADDR	(MVF_AIPS1_BASE_ADDR - 0x80000 + 0x000D1000)
+-#define MVF_FLEXCAN1_BASE_ADDR	(MVF_AIPS1_BASE_ADDR - 0x80000 + 0x000D4000)
++#define MVF_CAN1_BASE_ADDR	(MVF_AIPS1_BASE_ADDR - 0x80000 + 0x000D4000)
+ #define MVF_DCU1_BASE_ADDR	(MVF_AIPS1_BASE_ADDR - 0x80000 + 0x000D8000)
+ #define MVF_NFC_BASE_ADDR	(MVF_AIPS1_BASE_ADDR - 0x80000 + 0x000E0000)
+ #define MVF_I2C2_BASE_ADDR	(MVF_AIPS1_BASE_ADDR - 0x80000 + 0x000E6000)
+diff --git a/drivers/net/can/flexcan.c b/drivers/net/can/flexcan.c
+index 27dcf75..9761119 100644
+--- a/drivers/net/can/flexcan.c
++++ b/drivers/net/can/flexcan.c
+@@ -252,11 +252,18 @@ static int flexcan_get_berr_counter(const struct net_device *dev,
+ {
+ 	const struct flexcan_priv *priv = netdev_priv(dev);
+ 	struct flexcan_regs __iomem *regs = priv->base;
++
++	if (in_interrupt()) return -1;		// can't enable clock in irq!
++
++	clk_enable(priv->clk);
++
+ 	u32 reg = readl(&regs->ecr);
+ 
+ 	bec->txerr = (reg >> 0) & 0xff;
+ 	bec->rxerr = (reg >> 8) & 0xff;
+ 
++	clk_disable(priv->clk);
++
+ 	return 0;
+ }
+ 
+@@ -893,6 +900,10 @@ static int __devinit register_flexcandev(struct net_device *dev)
+ 	flexcan_chip_disable(priv);
+ 	reg = readl(&regs->ctrl);
+ 	reg |= FLEXCAN_CTRL_CLK_SRC;
++
++	/* FIXME: fix the clock setup so this delay is not required */
++	udelay(1);
++
+ 	writel(reg, &regs->ctrl);
+ 
+ 	flexcan_chip_enable(priv);
+@@ -947,6 +958,9 @@ static struct platform_device_id flexcan_devtype[] = {
+ 	}, {
+ 		.name = "imx6q-flexcan",
+ 		.driver_data = FLEXCAN_VER_10_0_12,
++	}, {
++		.name = "mvf-flexcan",
++		.driver_data = FLEXCAN_VER_10_0_12,
+ 	},
+ };
+ 
+-- 
+2.1.4
+

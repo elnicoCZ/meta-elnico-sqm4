@@ -1,0 +1,139 @@
+From 8290f1d2755a8e37468333d041c0892ffbade1a5 Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Wed, 18 Jan 2017 11:19:38 +0100
+Subject: [PATCH] dspi: Driver generalized for all SPI channels (DMA).
+
+---
+ drivers/spi/spi_mvf_dspi.c | 49 ++++++++++++++++++++++++++++++++++------------
+ 1 file changed, 37 insertions(+), 12 deletions(-)
+
+diff --git a/drivers/spi/spi_mvf_dspi.c b/drivers/spi/spi_mvf_dspi.c
+index a394659..289de9d 100644
+--- a/drivers/spi/spi_mvf_dspi.c
++++ b/drivers/spi/spi_mvf_dspi.c
+@@ -54,10 +54,14 @@
+ #if defined(CONFIG_SPI_MVF_DSPI_EDMA)
+ #define SPI_DSPI_EDMA
+ #define EDMA_BUFSIZE_KMALLOC	(DSPI_FIFO_SIZE * 4)
+-#define DSPI_DMA_RX_TCD		DMA_MUX_DSPI0_RX
+-#define DSPI_DMA_TX_TCD		DMA_MUX_DSPI0_TX
+ #endif
+ 
++struct spi_dma_data {
++	int rx_tcd;
++	int tx_tcd;
++	int aips_base;
++};
++
+ struct DSPI_MCR {
+ 	unsigned halt:1;
+ 	unsigned reserved71:7;
+@@ -155,6 +159,7 @@ struct spi_mvf_data {
+ 	dma_addr_t edma_rx_buf_pa;
+ 	int tx_chan;
+ 	int rx_chan;
++	const struct spi_dma_data * dma_data;
+ #endif
+ 
+ 	void (*cs_control)(u8 cs, u8 command);
+@@ -309,7 +314,7 @@ static int write(struct spi_mvf_data *spi_mvf)
+ 	if (tx_count > 0) {
+ 		mcf_edma_set_tcd_params(spi_mvf->tx_chan,
+ 			spi_mvf->edma_tx_buf_pa,
+-			0x4002c034,
++			spi_mvf->dma_data->aips_base + 0x34,
+ 			MCF_EDMA_TCD_ATTR_SSIZE_32BIT
+ 			| MCF_EDMA_TCD_ATTR_DSIZE_32BIT,
+ 			4,		/* soff */
+@@ -324,7 +329,7 @@ static int write(struct spi_mvf_data *spi_mvf)
+ 			0);		/* enable sg */
+ 
+ 		mcf_edma_set_tcd_params(spi_mvf->rx_chan,
+-			0x4002c038,
++			spi_mvf->dma_data->aips_base + 0x38,
+ 			spi_mvf->edma_rx_buf_pa,
+ 			MCF_EDMA_TCD_ATTR_SSIZE_32BIT
+ 			| MCF_EDMA_TCD_ATTR_DSIZE_32BIT,
+@@ -402,11 +407,32 @@ static inline void dspi_setup_chip(struct spi_mvf_data *spi_mvf)
+ }
+ 
+ #if defined(SPI_DSPI_EDMA)
+-static struct spi_mvf_data *dspi_drv_data;
++static const struct spi_dma_data dspi_dma_data[] = {
++	[0] = {
++		.rx_tcd = DMA_MUX_DSPI0_RX,
++		.tx_tcd = DMA_MUX_DSPI0_TX,
++		.aips_base = 0x4002c000,
++	},
++	[1] = {
++		.rx_tcd = DMA_MUX_DSPI1_RX,
++		.tx_tcd = DMA_MUX_DSPI1_TX,
++		.aips_base = 0x4002d000,
++	},
++	[2] = {
++		.rx_tcd = DMA_MUX_DSPI2_RX,
++		.tx_tcd = DMA_MUX_DSPI2_TX,
++		.aips_base = 0x400ac000,
++	},
++	[3] = {
++		.rx_tcd = DMA_MUX_DSPI3_RX,
++		.tx_tcd = DMA_MUX_DSPI3_TX,
++		.aips_base = 0x400ad000,
++	},
++};
+ 
+ static irqreturn_t edma_tx_handler(int channel, void *dev)
+ {
+-	struct spi_mvf_data *spi_mvf = dspi_drv_data;
++	struct spi_mvf_data *spi_mvf = platform_get_drvdata(dev);
+ 
+ 	if (channel == spi_mvf->tx_chan)
+ 		mcf_edma_stop_transfer(spi_mvf->tx_chan);
+@@ -415,7 +441,7 @@ static irqreturn_t edma_tx_handler(int channel, void *dev)
+ 
+ static irqreturn_t edma_rx_handler(int channel, void *dev)
+ {
+-	struct spi_mvf_data *spi_mvf = dspi_drv_data;
++	struct spi_mvf_data *spi_mvf = platform_get_drvdata(dev);
+ 
+ 	if (channel == spi_mvf->rx_chan) {
+ 		mcf_edma_stop_transfer(spi_mvf->tx_chan);
+@@ -909,6 +935,7 @@ static int spi_mvf_probe(struct platform_device *pdev)
+ 	clk_enable(spi_mvf->clk);
+ 
+ #if defined(SPI_DSPI_EDMA)
++	spi_mvf->dma_data = &dspi_dma_data[master->bus_num];
+ 	spi_mvf->edma_tx_buf = dma_alloc_coherent(NULL, EDMA_BUFSIZE_KMALLOC,
+ 			&spi_mvf->edma_tx_buf_pa, GFP_DMA);
+ 	if (!spi_mvf->edma_tx_buf) {
+@@ -929,7 +956,7 @@ static int spi_mvf_probe(struct platform_device *pdev)
+ 			spi_mvf->edma_tx_buf, spi_mvf->edma_tx_buf_pa,
+ 			spi_mvf->edma_rx_buf, spi_mvf->edma_rx_buf_pa);
+ 
+-	spi_mvf->tx_chan = mcf_edma_request_channel(DSPI_DMA_TX_TCD,
++	spi_mvf->tx_chan = mcf_edma_request_channel(spi_mvf->dma_data->tx_tcd,
+ 		edma_tx_handler, NULL, 0x00, pdev, NULL, DRIVER_NAME);
+ 	if (spi_mvf->tx_chan < 0) {
+ 		dev_err(&pdev->dev, "eDMA transmit channel request\n");
+@@ -942,16 +969,14 @@ static int spi_mvf_probe(struct platform_device *pdev)
+  * by SPI communicate machnisim, i.e, is half duplex mode, that is
+  * whether read or write, we need write data out to get we wanted.
+  */
+-	spi_mvf->rx_chan = mcf_edma_request_channel(DSPI_DMA_RX_TCD,
++	spi_mvf->rx_chan = mcf_edma_request_channel(spi_mvf->dma_data->rx_tcd,
+ 		edma_rx_handler, NULL, 0x06, pdev, NULL, DRIVER_NAME);
+ 	if (spi_mvf->rx_chan < 0) {
+-		dev_err(&pdev->dev, "eDAM receive channel request\n");
++		dev_err(&pdev->dev, "eDMA receive channel request\n");
+ 		ret = -EINVAL;
+ 		mcf_edma_free_channel(spi_mvf->tx_chan, pdev);
+ 		goto out_error_queue_alloc;
+ 	}
+-
+-	dspi_drv_data = spi_mvf;
+ #endif
+ 
+ 	/* Register with the SPI framework */
+-- 
+2.1.4
+
