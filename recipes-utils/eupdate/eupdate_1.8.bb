@@ -2,9 +2,9 @@
 SUMMARY = "Elnico Updater"
 LICENSE = "GPLv3"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=84dcc94da3adb52b53ae4fa38fe49e5d"
-PR = "r1"
+PR = "r2"
 
-RDEPENDS_${PN} = "coreutils"
+RDEPENDS_${PN} = "coreutils mtd-utils"
 
 FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}-${PV}:"
 

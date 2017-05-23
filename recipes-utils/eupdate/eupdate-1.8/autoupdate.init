@@ -49,9 +49,14 @@ do_update()
 		exit 3
 	fi
 
+	# read the EPD file from NAND, without error correction
+	EPD_FILE="/tmp/eupdate.epd"
+	kecho "Reading from the /dev/$MTD partition to $EPD_FILE."
+	nanddump -n -f $EPD_FILE /dev/$MTD
+
 	# try to update
-	kecho "Updating from the /dev/$MTD partition."
-	/etc/eupdate/eupdate /dev/$MTD > /dev/kmsg
+	kecho "Updating from the $EPD_FILE file."
+	/etc/eupdate/eupdate $EPD_FILE > /dev/kmsg
 	[ $? -eq 0 ] && kecho "Update succeeded." || kecho "Update failed."
 
 	# in any case, invalidate the partition (clear the first block)
