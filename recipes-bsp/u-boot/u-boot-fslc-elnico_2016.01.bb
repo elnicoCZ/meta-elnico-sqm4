@@ -1,6 +1,6 @@
 require recipes-bsp/u-boot/u-boot-fslc.inc
 
-PV = "2016.01"
+PV = "v2016.01+git${SRCPV}"
 
 SRCBRANCH = "2016.01+elnico"
 SRC_URI = "git://github.com/elnicoCZ/u-boot-fslc.git;protocol=git;branch=${SRCBRANCH} \
