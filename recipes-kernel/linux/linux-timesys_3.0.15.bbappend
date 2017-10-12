@@ -11,9 +11,9 @@ SRC_URI += "file://defconfig \
             file://0009-NFC-8-bit-NAND-patch-do-not-set-the-CONFIG_16BIT_MAS.patch \
             file://0010-sdhc-Use-22K-pullup-for-the-Card-Detect-pin-for-high.patch \
             file://0012-mvf_fec-fec_get_mac_addr-MAC-address-bytes-order-rev.patch \
-            file://0013-dspi-Driver-generalized-for-all-SPI-channels-DMA.patch \
             file://0014-flexcan-Driver-fixed-and-added-support-for-flexcan0-.patch \
+            file://0015-dspi-Driver-generalized-for-all-SPI-channels-DMA-clo.patch \
 "
 
-PR = "r4"
+PR = "r5"
 

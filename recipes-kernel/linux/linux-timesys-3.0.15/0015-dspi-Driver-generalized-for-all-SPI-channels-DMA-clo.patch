@@ -1,14 +1,63 @@
-From 8290f1d2755a8e37468333d041c0892ffbade1a5 Mon Sep 17 00:00:00 2001
+From f7beaec4c28330d84570c81a70c2b05aa3bb2a40 Mon Sep 17 00:00:00 2001
 From: Petr Kubiznak <kubiznak.petr@elnico.cz>
-Date: Wed, 18 Jan 2017 11:19:38 +0100
-Subject: [PATCH] dspi: Driver generalized for all SPI channels (DMA).
+Date: Thu, 12 Oct 2017 09:27:20 +0200
+Subject: [PATCH] dspi: Driver generalized for all SPI channels (DMA, clock).
 
 ---
+ arch/arm/mach-mvf/clock.c  | 30 ++++++++++++++++++++++++++++
  drivers/spi/spi_mvf_dspi.c | 49 ++++++++++++++++++++++++++++++++++------------
- 1 file changed, 37 insertions(+), 12 deletions(-)
+ 2 files changed, 67 insertions(+), 12 deletions(-)
 
+diff --git a/arch/arm/mach-mvf/clock.c b/arch/arm/mach-mvf/clock.c
+index c9e82bdf226..f49e04f549c 100644
+--- a/arch/arm/mach-mvf/clock.c
++++ b/arch/arm/mach-mvf/clock.c
+@@ -1209,6 +1209,33 @@ static struct clk dspi_clk[] = {
+ 	.enable = _clk_enable,
+ 	.disable = _clk_disable,
+ 	},
++	{
++	__INIT_CLK_DEBUG(dspi1_clk)
++	.id = 1,
++	.parent = &ipg_clk,
++	.enable_reg = MXC_CCM_CCGR0,
++	.enable_shift = MXC_CCM_CCGRx_CG13_OFFSET,
++	.enable = _clk_enable,
++	.disable = _clk_disable,
++	},
++	{
++	__INIT_CLK_DEBUG(dspi2_clk)
++	.id = 2,
++	.parent = &ipg_clk,
++	.enable_reg = MXC_CCM_CCGR6,
++	.enable_shift = MXC_CCM_CCGRx_CG12_OFFSET,
++	.enable = _clk_enable,
++	.disable = _clk_disable,
++	},
++	{
++	__INIT_CLK_DEBUG(dspi3_clk)
++	.id = 3,
++	.parent = &ipg_clk,
++	.enable_reg = MXC_CCM_CCGR6,
++	.enable_shift = MXC_CCM_CCGRx_CG13_OFFSET,
++	.enable = _clk_enable,
++	.disable = _clk_disable,
++	},
+ };
+ 
+ static int _clk_esdhc1_set_parent(struct clk *clk, struct clk *parent)
+@@ -2124,6 +2151,9 @@ static struct clk_lookup lookups[] = {
+ 	_REGISTER_CLOCK("mvf-flexcan.0", NULL, can0_clk[0]),
+ 	_REGISTER_CLOCK("mvf-flexcan.1", NULL, can1_clk[0]),
+ 	_REGISTER_CLOCK("mvf-dspi.0", NULL, dspi_clk[0]),
++	_REGISTER_CLOCK("mvf-dspi.1", NULL, dspi_clk[1]),
++	_REGISTER_CLOCK("mvf-dspi.2", NULL, dspi_clk[2]),
++	_REGISTER_CLOCK("mvf-dspi.3", NULL, dspi_clk[3]),
+ 	_REGISTER_CLOCK("pit", NULL, pit_clk),
+ 	_REGISTER_CLOCK("fec.0", NULL, enet_clk[0]),
+ 	_REGISTER_CLOCK("fec.1", NULL, enet_clk[1]),
 diff --git a/drivers/spi/spi_mvf_dspi.c b/drivers/spi/spi_mvf_dspi.c
-index a394659..289de9d 100644
+index a394659a3b0..289de9d40da 100644
 --- a/drivers/spi/spi_mvf_dspi.c
 +++ b/drivers/spi/spi_mvf_dspi.c
 @@ -54,10 +54,14 @@
@@ -135,5 +184,5 @@ index a394659..289de9d 100644
  
  	/* Register with the SPI framework */
 -- 
-2.1.4
+2.11.0
 
