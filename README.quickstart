@@ -1,12 +1,12 @@
 This is a short Quick Start Guide document listing a straight-forward process of building a custom Yocto-based Linux image for the SQM4-VF6-EasyBoard Development Kit. Purpose of this document is *NOT* to explain the Yocto workflow, nor to provide a reference manual. It only describes how to setup the environment in the minimum number of steps. For complete Yocto project documentation, please refer to https://www.yoctoproject.org/documentation.
 
-The SQM4-VF6-EasyBoard BSP is based on the Freescale TWR-VF65GS10 BSP, which is available at https://github.com/Freescale/fsl-community-bsp-platform, meta-fsl-arm and related Yocto layers. Customization of the BSP is provided by the meta-elnico-sqm4 layer, available at https://github.com/elnicoCZ/meta-elnico-sqm4.
+The SQM4-VF6-EasyBoard BSP is based on the Freescale TWR-VF65GS10 BSP, available as a meta-fsl-arm and related Yocto layers. Customization of the BSP is provided by the meta-elnico-sqm4 layer, available at https://github.com/elnicoCZ/meta-elnico-sqm4. All these are covered by a single BSP Platform repository, available at https://github.com/elnicoCZ/eln-community-bsp-platform.
 
 For more information on the SQM4 products, please visit http://www.sqm4.com.
 
 The general steps in this document are based on the Yocto Training document published at the Freescale's Community website (https://community.freescale.com/docs/DOC-94849).
 
-This document expects a working directory called "yocto", as signalized by "[yocto]$". Whenever the working directory changes during the process, it is signalized appropriately (e.g. "[fsl-community-bsp]$" after call to "cd fsl-community-bsp").
+This document expects a working directory called "yocto", as signalized by "[yocto]$". Whenever the working directory changes during the process, it is signalized appropriately (e.g. "[eln-community-bsp]$" after call to "cd eln-community-bsp").
 
 =================================
  1. Install required packages ===
@@ -26,57 +26,29 @@ This document expects a working directory called "yocto", as signalized by "[yoc
    [yocto]$ sudo curl http://commondatastorage.googleapis.com/git-repo-downloads/repo > /usr/local/bin/repo
    [yocto]$ chmod a+x /usr/local/bin/repo
 
-======================================
- 3. Download Freescale BSP sources ===
-======================================
-   [yocto]$ mkdir fsl-community-bsp
-   [yocto]$ cd fsl-community-bsp
-   [fsl-community-bsp]$ repo init -u https://github.com/Freescale/fsl-community-bsp-platform -b dizzy
-   [fsl-community-bsp]$ repo sync
-
-=================================
- 4. Download SQM4 BSP sources ===
-=================================
-   [fsl-community-bsp]$ cd sources
-   [sources]$ git clone https://github.com/elnicoCZ/meta-elnico-sqm4 -b dizzy
+============================
+ 3. Download BSP sources ===
+============================
+   [yocto]$ mkdir eln-community-bsp
+   [yocto]$ cd eln-community-bsp
+   [eln-community-bsp]$ repo init -u https://github.com/elnicoCZ/eln-community-bsp-platform.git -b dizzy
+   [eln-community-bsp]$ repo sync
 
 ===============================
- 5. Setup build environment ===
+ 4. Setup build environment ===
 ===============================
    [sources]$ cd ..
-   [fsl-community-bsp]$ MACHINE=sqm4vf6-eb && source ./setup-environment build-sqm4vf6-eb
+   [eln-community-bsp]$ MACHINE=sqm4vf6-eb && source ./setup-environment build-sqm4vf6-eb
    [build-sqm4vf6-eb]$
 
-=====================================
- 6. Enable meta-elnico-sqm4 layer ===
-=====================================
-Open build-sqm4vf6-eb/conf/bblayers.conf in a text editor:
-   [build-sqm4vf6-eb]$ vi conf/bblayers.conf
-And append the following line to the BBLAYERS variable:
-${BSPDIR}/sources/meta-elnico-sqm4 \
-
-The resulting BBLAYERS variable should look like this:
-BBLAYERS = " \
-  ${BSPDIR}/sources/poky/meta \
-  ${BSPDIR}/sources/poky/meta-yocto \
-  \
-  ${BSPDIR}/sources/meta-openembedded/meta-oe \
-  ${BSPDIR}/sources/meta-openembedded/meta-multimedia \
-  \
-  ${BSPDIR}/sources/meta-fsl-arm \
-  ${BSPDIR}/sources/meta-fsl-arm-extra \
-  ${BSPDIR}/sources/meta-fsl-demos \
-  ${BSPDIR}/sources/meta-elnico-sqm4 \
-"
-
 ======================
- 7. Build an image ===
+ 5. Build an image ===
 ======================
 Start with the smallest available image:
    [build-sqm4vf6-eb]$ bitbake core-image-minimal
 
 =======================
- 8. Prepare SD card ===
+ 6. Prepare SD card ===
 =======================
    [build-sqm4vf6-eb]$ cd tmp/deploy/images/sqm4vf6-eb
 In the following command, replace sdX with your SD card device name, e.g. sdc. Check dmesg.
@@ -84,14 +56,14 @@ In the following command, replace sdX with your SD card device name, e.g. sdc. C
    [sqm4vf6-eb]$ sync
 
 ======================
- 9. Evaluate image ===
+ 7. Evaluate image ===
 ======================
 Insert the produced Micro-SD card in the corresponding slot of the SQM4-VF6-EasyBoard Development Kit and power on the device. The system will boot automatically. Use a serial cable attached to the Debug port to see u-boot and kernel standard output and to log in to the device console.
 Your first Yocto-based Linux image for SQM4-VF6-EasyBoard Development Kit is complete.
 
-======================
- 10. Advanced demo ===
-======================
+=====================
+ 8. Advanced demo ===
+=====================
 There is a more complex demo image available, featuring display and audio support with Qt interface and multimedia playback. It uses some packages licensed under non-free licenses, though. To ensure successful build, one needs to agree with the licenses of libav, x264 and gst-ffmpeg packages, and confirm that agreement by adding the following line to the conf/local.conf file:
    LICENSE_FLAGS_WHITELIST = "commercial_libav commercial_x264 commercial_gst-ffmpeg"
 Now the easy-duo-demo-image can be built:
