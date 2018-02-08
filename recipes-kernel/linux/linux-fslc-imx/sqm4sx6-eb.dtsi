@@ -114,7 +114,7 @@
 			regulator-name = "peri_3v3";
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3300000>;
-			gpios = <&gpio4 16 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio2 15 GPIO_ACTIVE_HIGH>;
 			enable-active-high;
 			regulator-always-on;
 		};
@@ -122,12 +122,9 @@
 		reg_enet_3v3: regulator@6 {
 			compatible = "regulator-fixed";
 			reg = <6>;
-			pinctrl-names = "default";
-			pinctrl-0 = <&pinctrl_enet_3v3>;
 			regulator-name = "enet_3v3";
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3300000>;
-			gpios = <&gpio2 6 GPIO_ACTIVE_LOW>;
 		};
 
 		reg_vref_3v3: regulator@7 {
@@ -136,19 +133,6 @@
 			regulator-name = "vref-3v3";
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3300000>;
-		};
-
-		reg_pcie: regulator@8 {
-			compatible = "regulator-fixed";
-			reg = <8>;
-			pinctrl-names = "default";
-			pinctrl-0 = <&pinctrl_pcie_reg>;
-			regulator-name = "MPCIE_3V3";
-			regulator-min-microvolt = <3300000>;
-			regulator-max-microvolt = <3300000>;
-			gpio = <&gpio2 1 0>;
-			regulator-always-on;
-			enable-active-high;
 		};
 
 		reg_sgtl_3v3_can_stby: regulator@9 {
@@ -179,6 +163,11 @@
 		mux-int-port = <2>;
 		mux-ext-port = <6>;
 	};
+
+	pxp_v4l2_out {
+		compatible = "fsl,imx6sx-pxp-v4l2", "fsl,imx6sl-pxp-v4l2";
+		status = "okay";
+	};
 };
 
 &adc1 {
@@ -206,19 +195,43 @@
 	pinctrl-0 = <&pinctrl_enet1>;
 	phy-supply = <&reg_enet_3v3>;
 	phy-mode = "rgmii";
-	phy-handle = <&ethphy1>;
+	phy-handle = <&ethphy0>;
+	phy-reset-gpios = <&gpio2 0 GPIO_ACTIVE_LOW>;
 	status = "okay";
 
 	mdio {
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		ethphy1: ethernet-phy@1 {
-			reg = <1>;
+		ethphy0: ethernet-phy@0 {
+			reg = <0>;
 		};
 
-		ethphy2: ethernet-phy@2 {
-			reg = <2>;
+/*		ethphy1: ethernet-phy@1 {
+			reg = <1>;
+		};*/
+	};
+};
+
+&fec2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_enet2>;
+	phy-supply = <&reg_enet_3v3>;
+	phy-mode = "rgmii";
+	phy-handle = <&ethphy1>;
+	phy-reset-gpios = <&gpio2 1 GPIO_ACTIVE_LOW>;
+	status = "disabled";
+
+	mdio {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+/*		ethphy0: ethernet-phy@0 {
+			reg = <0>;
+		};*/
+
+		ethphy1: ethernet-phy@1 {
+			reg = <1>;
 		};
 	};
 };
@@ -250,11 +263,7 @@
 	status = "okay";
 };
 
-&fec2 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_enet2>;
-	phy-mode = "rgmii";
-	phy-handle = <&ethphy2>;
+&pxp {
 	status = "okay";
 };
 

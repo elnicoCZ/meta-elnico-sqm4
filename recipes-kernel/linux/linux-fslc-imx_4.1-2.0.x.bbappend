@@ -5,6 +5,7 @@ SRC_URI += "file://0001-touchscreen-CRTOUCH-driver-ported-from.patch \
             file://sqm4sx6.dtsi \
             file://sqm4sx6-eb.dtsi \
             file://sqm4sx6-eb.dts \
+            file://sqm4sx6-eb-m4.dts \
 "
 
 do_compile_prepend () {
