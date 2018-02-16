@@ -13,7 +13,8 @@ SRC_URI += "file://defconfig \
             file://0012-mvf_fec-fec_get_mac_addr-MAC-address-bytes-order-rev.patch \
             file://0014-flexcan-Driver-fixed-and-added-support-for-flexcan0-.patch \
             file://0015-dspi-Driver-generalized-for-all-SPI-channels-DMA-clo.patch \
+            file://0016-DCU-FRD070IF40-display-support-added.-Other-FRDxx-di.patch \
 "
 
-PR = "r5"
+PR = "r6"
 
