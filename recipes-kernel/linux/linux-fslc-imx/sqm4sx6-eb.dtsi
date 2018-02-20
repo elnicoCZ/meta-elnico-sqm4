@@ -319,19 +319,19 @@
 	status = "okay";
 
 	display0: display {
-		bits-per-pixel = <16>;
+		bits-per-pixel = <24>;
 		bus-width = <24>;
 
 		display-timings {
 			native-mode = <&timing0>;
 			timing0: timing0 {
-				clock-frequency = <33500000>;
+				clock-frequency = <9000000>;
 				hactive = <480>;
 				vactive = <272>;
-				hback-porch = <2>;
-				hfront-porch = <2>;
-				vback-porch = <1>;
-				vfront-porch = <1>;
+				hback-porch = <43>;
+				hfront-porch = <8>;
+				vback-porch = <12>;
+				vfront-porch = <4>;
 				hsync-len = <41>;
 				vsync-len = <2>;
 				hsync-active = <1>;
