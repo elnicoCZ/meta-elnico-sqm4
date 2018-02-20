@@ -1,0 +1,101 @@
+# Echos partition index and returns 0, or returns 1 if not found.
+# $1: partition name
+mtd_name2idx() {
+	local name=$1
+	local idx=0
+	local prefix=/sys/class/mtd/mtd
+
+	while [ -d $prefix$idx ]
+	do
+		local curname=`cat $prefix$idx/name`
+		[ "$name" = "$curname" ] && echo $idx && return 0
+		let "idx+=1"
+	done
+	return 1
+}
+
+# Installs a u-boot binary to an MTD device.
+# $1: path to u-boot binary
+# $2: mtd partition index
+mtd_install_uboot() {
+	local bin=$1
+	local mtdidx=$2
+	local dev=/dev/mtd$mtdidx
+	[ -f $bin ] || return 1
+	[ -c $dev ] || return 2
+
+	flash_erase $dev 0 0 || return 3
+	kobs-ng init -x -v --chip_0_device_path=$dev $bin || return 4
+	sync
+	return 0
+}
+
+# Installs a general binary to an MTD device.
+# $1: path to a binary
+# $2: mtd partition index
+mtd_install_binary() {
+	local bin=$1
+	local mtdidx=$2
+	local dev=/dev/mtd$mtdidx
+	[ -f $bin ] || return 1
+	[ -c $dev ] || return 2
+
+	flash_erase $dev 0 0 || return 3
+	nandwrite -p $dev $bin || return 4
+	sync
+	return 0
+}
+
+# Installs a UBI filesystem from an archive.
+# $1: path to the tar.bz2 archive or "-" to create empty filesystem
+# $2: filesystem label (name)
+# $3: mtd partition index
+# $4: ubi device index
+mtd_install_ubi() {
+	local bin=$1
+	local name=$2
+	local mtdidx=$3
+	local ubiidx=$4
+	local dev=/dev/mtd$mtdidx
+	local mount=/tmp/mtd_ubi_mount
+	[ "-" = $bin ] || [ -f $bin ] || return 1
+	[ -c $dev ] || return 2
+
+	flash_erase $dev 0 0 || return 3
+	ubiformat $dev -s 2048 -O 2048 || return 4
+	ubiattach -m $mtdidx -d $ubiidx -O 2048 || return 5
+	ubimkvol /dev/ubi$ubiidx -N $name -m || return 6
+	mkdir -p $mount || return 7
+	mount -t ubifs ubi$ubiidx:$name $mount || return 8
+	[ "-" = $bin ] || tar -xf $bin -C $mount || return 9
+	sync
+	umount $mount
+	rmdir $mount
+	return 0
+}
+
+# Mounts a UBIFS filesystem
+# $1: filesystem label (name)
+# $2: ubi device index
+# $3: mount point
+mtd_mount_ubi() {
+	local name=$1
+	local ubiidx=$2
+	local mount=$3
+
+	mount -t ubifs ubi$ubiidx:$name $mount
+}
+
+# Terminates script execution with a result message
+# $1: Script return value (0=success, else failure)
+quit() {             
+        echo "---------------"                           
+        [ $1 -eq 0 ] && echo "--- SUCCESS ---" || echo "--- FAILURE ---"
+        echo "---------------"                           
+                                                         
+        # beep                                              
+        echo -ne \\07                                       
+                                                            
+        exit $1                                             
+}                                                           
+
