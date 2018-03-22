@@ -1,0 +1,586 @@
+diff --git a/drivers/rtc/Kconfig b/drivers/rtc/Kconfig
+index 0fe4ad8826b2..d3928705bb50 100644
+--- a/drivers/rtc/Kconfig
++++ b/drivers/rtc/Kconfig
+@@ -164,6 +164,17 @@ config RTC_DRV_ABB5ZES3
+ 	  This driver can also be built as a module. If so, the module
+ 	  will be called rtc-ab-b5ze-s3.
+ 
++config RTC_DRV_ABEOZ9S3
++	depends on I2C
++	select REGMAP_I2C
++	tristate "Abracon AB-RTCMC-32.768kHz-EOZ9-S3"
++	help
++	  If you say yes here you get support for the Abracon
++	  AB-RTCMC-32.768kHz-EOZ9-S3 I2C RTC chip.
++
++	  This driver can also be built as a module. If so, the module
++	  will be called rtc-ab-eoz9-s3.
++
+ config RTC_DRV_ABX80X
+ 	tristate "Abracon ABx80x"
+ 	help
+diff --git a/drivers/rtc/Makefile b/drivers/rtc/Makefile
+index 2b82e2b0311b..9fba9517e4d1 100644
+--- a/drivers/rtc/Makefile
++++ b/drivers/rtc/Makefile
+@@ -25,6 +25,7 @@ obj-$(CONFIG_RTC_DRV_88PM80X)	+= rtc-88pm80x.o
+ obj-$(CONFIG_RTC_DRV_AB3100)	+= rtc-ab3100.o
+ obj-$(CONFIG_RTC_DRV_AB8500)	+= rtc-ab8500.o
+ obj-$(CONFIG_RTC_DRV_ABB5ZES3)	+= rtc-ab-b5ze-s3.o
++obj-$(CONFIG_RTC_DRV_ABEOZ9S3)	+= rtc-ab-eoz9-s3.o
+ obj-$(CONFIG_RTC_DRV_ABX80X)	+= rtc-abx80x.o
+ obj-$(CONFIG_RTC_DRV_ARMADA38X)	+= rtc-armada38x.o
+ obj-$(CONFIG_RTC_DRV_AS3722)	+= rtc-as3722.o
+diff --git a/drivers/rtc/rtc-ab-eoz9-s3.c b/drivers/rtc/rtc-ab-eoz9-s3.c
+new file mode 100644
+index 000000000000..97a4f3bf6b65
+--- /dev/null
++++ b/drivers/rtc/rtc-ab-eoz9-s3.c
+@@ -0,0 +1,546 @@
++/*
++ * rtc-ab-eoz9-s3 - Driver for Abracon AB-RTCMC-32.768Khz-EOZ9-S3
++ *                  I2C RTC / Alarm chip
++ *
++ * Copyright (C) 2018, Petr KUBIZNAK <kubiznak.petr@elnico.cz>
++ *
++ * Detailed datasheet of the chip is available here:
++ *
++ *  http://www.abracon.com/realtimeclock/AB-RTCMC-32.768kHz-EOZ9-S3-Application-Manual.pdf
++ *
++ * This driver is a modification of AB-RTCMC-32.768Khz-B5ZE-S3 driver
++ * (drivers/rtc/rtc-ab-b5ze-s3.c) by Arnaud EBALARD.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/rtc.h>
++#include <linux/i2c.h>
++#include <linux/bcd.h>
++#include <linux/of.h>
++#include <linux/regmap.h>
++#include <linux/interrupt.h>
++
++#define DRV_NAME "rtc-ab-eoz9-s3"
++
++/* Control section */
++#define ABEOZ9S3_REG_CTRL1	   0x00	   /* CONTROL_1 register */
++#define ABEOZ9S3_REG_CTRL1_CLKINT  BIT(7)  /* CLKOUT pin function select */
++#define ABEOZ9S3_REG_CTRL1_TD1	   BIT(6)  /* Countdown timer source clock bit 1 */
++#define ABEOZ9S3_REG_CTRL1_TD0	   BIT(5)  /* Countdown timer source clock bit 0 */
++#define ABEOZ9S3_REG_CTRL1_SRON	   BIT(4)  /* Self-recovery enable */
++#define ABEOZ9S3_REG_CTRL1_EERE	   BIT(3)  /* EEPROM refresh enable */
++#define ABEOZ9S3_REG_CTRL1_TAR	   BIT(2)  /* Timer auto-reload enable */
++#define ABEOZ9S3_REG_CTRL1_TE	   BIT(1)  /* Timer countdown enable */
++#define ABEOZ9S3_REG_CTRL1_WE	   BIT(0)  /* Watch clock enable */
++
++#define ABEOZ9S3_REG_CINT	   0x01	   /* CONTROL_INT register */
++#define ABEOZ9S3_REG_CINT_SRIE	   BIT(4)  /* Self-recovery int. enable */
++#define ABEOZ9S3_REG_CINT_V2IE	   BIT(3)  /* Battery critically low int. enable */
++#define ABEOZ9S3_REG_CINT_V1IE	   BIT(2)  /* Battery low int. enable */
++#define ABEOZ9S3_REG_CINT_TIE	   BIT(1)  /* Countdown timer int. enable */
++#define ABEOZ9S3_REG_CINT_AIE	   BIT(0)  /* Alarm int. enable */
++
++#define ABEOZ9S3_REG_CINTF	   0x02	   /* CONTROL_INT FLAG register */
++#define ABEOZ9S3_REG_CINTF_SRF	   BIT(4)  /* Self-recovery int. status */
++#define ABEOZ9S3_REG_CINTF_V2IF	   BIT(3)  /* Battery critically low int. status */
++#define ABEOZ9S3_REG_CINTF_V1IF	   BIT(2)  /* Battery low int. status */
++#define ABEOZ9S3_REG_CINTF_TF	   BIT(1)  /* Countdown timer int. status */
++#define ABEOZ9S3_REG_CINTF_AF	   BIT(0)  /* Alarm int. status */
++
++#define ABEOZ9S3_REG_CSTAT	   0x03	   /* CONTROL_STATUS register */
++#define ABEOZ9S3_REG_CSTAT_EEBUSY  BIT(7)  /* EEPROM busy status */
++#define ABEOZ9S3_REG_CSTAT_PON	   BIT(5)  /* Power-On Reset status */
++#define ABEOZ9S3_REG_CSTAT_SR	   BIT(4)  /* Self-Recovery/System Reset status */
++#define ABEOZ9S3_REG_CSTAT_V2F	   BIT(3)  /* Battery critically low int. status (peer flag) */
++#define ABEOZ9S3_REG_CSTAT_V1F	   BIT(2)  /* Battery low int. status (peer flag) */
++
++#define ABEOZ9S3_REG_CRST	   0x04	   /* CONTROL_RESET register */
++#define ABEOZ9S3_REG_CRST_SYSR	   BIT(4)  /* System Reset control */
++
++#define ABEOZ9S3_CTRL_SEC_LEN	   5
++
++/* RTC section */
++#define ABEOZ9S3_REG_RTC_SC	   0x08	   /* RTC Seconds register */
++#define ABEOZ9S3_REG_RTC_MN	   0x09	   /* RTC Minutes register */
++#define ABEOZ9S3_REG_RTC_HR	   0x0A	   /* RTC Hours register */
++#define ABEOZ9S3_REG_RTC_HR_PM	   BIT(5)  /* RTC Hours PM bit */
++#define ABEOZ9S3_REG_RTC_HR_12	   BIT(6)  /* RTC Hours 12-hour mode select */
++#define ABEOZ9S3_REG_RTC_DT	   0x0B	   /* RTC Date register */
++#define ABEOZ9S3_REG_RTC_DW	   0x0C	   /* RTC Day of the week register */
++#define ABEOZ9S3_REG_RTC_MO	   0x0D	   /* RTC Month register */
++#define ABEOZ9S3_REG_RTC_YR	   0x0E	   /* RTC Year register */
++
++#define ABEOZ9S3_RTC_SEC_LEN	   7
++#define ABEOZ9S3_RTC_SEC_FIRST     ABEOZ9S3_REG_RTC_SC
++#define ABEOZ9S3_RTC_IDX_SC	   (ABEOZ9S3_REG_RTC_SC - ABEOZ9S3_RTC_SEC_FIRST)
++#define ABEOZ9S3_RTC_IDX_MN	   (ABEOZ9S3_REG_RTC_MN - ABEOZ9S3_RTC_SEC_FIRST)
++#define ABEOZ9S3_RTC_IDX_HR	   (ABEOZ9S3_REG_RTC_HR - ABEOZ9S3_RTC_SEC_FIRST)
++#define ABEOZ9S3_RTC_IDX_DT	   (ABEOZ9S3_REG_RTC_DT - ABEOZ9S3_RTC_SEC_FIRST)
++#define ABEOZ9S3_RTC_IDX_DW	   (ABEOZ9S3_REG_RTC_DW - ABEOZ9S3_RTC_SEC_FIRST)
++#define ABEOZ9S3_RTC_IDX_MO	   (ABEOZ9S3_REG_RTC_MO - ABEOZ9S3_RTC_SEC_FIRST)
++#define ABEOZ9S3_RTC_IDX_YR	   (ABEOZ9S3_REG_RTC_YR - ABEOZ9S3_RTC_SEC_FIRST)
++
++/* Alarm section - NOT IMPLEMENTED at the moment */
++#define ABEOZ9S3_REG_ALRM_SC	   0x10	   /* Alarm Seconds register */
++#define ABEOZ9S3_REG_ALRM_SC_AE	   BIT(7)  /* Seconds alarm enable */
++#define ABEOZ9S3_REG_ALRM_MN	   0x11	   /* Alarm Minutes register */
++#define ABEOZ9S3_REG_ALRM_MN_AE	   BIT(7)  /* Minutes alarm enable */
++#define ABEOZ9S3_REG_ALRM_HR	   0x12	   /* Alarm Hours register */
++#define ABEOZ9S3_REG_ALRM_HR_AE	   BIT(7)  /* Hour alarm enable */
++#define ABEOZ9S3_REG_ALRM_DT	   0x13	   /* Alarm Date register */
++#define ABEOZ9S3_REG_ALRM_DT_AE	   BIT(7)  /* Date (day of the month) alarm enable */
++#define ABEOZ9S3_REG_ALRM_DW	   0x14	   /* Alarm - day of the week reg. */
++#define ABEOZ9S3_REG_ALRM_DW_AE	   BIT(7)  /* Day of the week alarm enable */
++#define ABEOZ9S3_REG_ALRM_MO	   0x15	   /* Alarm Month register */
++#define ABEOZ9S3_REG_ALRM_MO_AE	   BIT(7)  /* Month alarm enable */
++#define ABEOZ9S3_REG_ALRM_YR	   0x16	   /* Alarm Year register */
++#define ABEOZ9S3_REG_ALRM_YR_AE	   BIT(7)  /* Year alarm enable */
++
++#define ABEOZ9S3_ALRM_SEC_LEN	   7
++
++/* NOTE: Further register functions are not implemented. */
++
++#define ABEOZ9S3_MEM_MAP_LEN	   0x40	   /* Full memory size */
++#define ABEOZ9S3_MEM_PAGE_LEN	   0x08	   /* Memory page size */
++#define ABEOZ9S3_MEM_PAGE_CNT	   (ABEOZ9S3_MEM_MAP_LEN / ABEOZ9S3_MEM_PAGE_LEN)
++
++struct abeoz9s3_rtc_data {
++	struct rtc_device *rtc;
++	struct regmap *regmap;
++	struct mutex lock;
++
++	int irq;
++
++	bool battery_low;
++};
++
++/*
++ * Try and match register bits w/ fixed null values to see whether we
++ * are dealing with an ABEOZ9S3. Note: this function is called early
++ * during init and hence does need mutex protection.
++ */
++static int abeoz9s3_i2c_validate_chip(struct regmap *regmap)
++{
++	u8 regs[ABEOZ9S3_MEM_PAGE_LEN];
++	static const u8 mask[ABEOZ9S3_MEM_MAP_LEN] = { /* Control Page */
++						       0x00, 0xe0, 0xe0, 0x43,
++						       0xef, 0xff, 0xff, 0xff,
++						       /* Clock Page */
++						       0x80, 0x80, 0x80, 0xc0,
++						       0xf8, 0xe0, 0x80, 0xff,
++						       /* Alarm Page */
++						       0x00, 0x00, 0x40, 0x40,
++						       0x78, 0x60, 0x00, 0xff,
++						       /* Timer Page */
++						       0x00, 0x00, 0xff, 0xff,
++						       0xff, 0xff, 0xff, 0xff,
++						       /* Temp Page */
++						       0x00, 0xff, 0xff, 0xff,
++						       0xff, 0xff, 0xff, 0xff,
++						       /* EEPROM User Page */
++						       0x00, 0x00, 0xff, 0xff,
++						       0xff, 0xff, 0xff, 0xff,
++						       /* EEPROM Control Page */
++						       0x00, 0x00, 0x00, 0xc0,
++						       0xff, 0xff, 0xff, 0xff,
++						       /* RAM Page */
++						       0x00, 0x00, 0x00, 0x00,
++						       0x00, 0x00, 0x00, 0x00 };
++	int ret, i, offset;
++
++	/* We have to read the pages individually */
++	for (offset = 0x00;
++	     offset < ABEOZ9S3_MEM_MAP_LEN;
++	     offset += ABEOZ9S3_MEM_PAGE_LEN)
++	{
++		ret = regmap_bulk_read(regmap, offset, regs,
++				       ABEOZ9S3_MEM_PAGE_LEN);
++		if (ret)
++			return ret;
++
++		for (i = 0; i < ABEOZ9S3_MEM_PAGE_LEN; ++i) {
++			if (regs[i] & mask[offset + i]) /* check if bits are cleared */
++				return -ENODEV;
++		}
++	}
++
++	return 0;
++}
++
++/*
++ * Note: we only read, so regmap inner lock protection is sufficient, i.e.
++ * we do not need driver's main lock protection.
++ */
++static int _abeoz9s3_rtc_read_time(struct device *dev, struct rtc_time *tm)
++{
++	struct abeoz9s3_rtc_data *data = dev_get_drvdata(dev);
++	u8 regs[ABEOZ9S3_RTC_SEC_LEN];
++	int ret;
++
++	/* Read the data */
++	ret = regmap_bulk_read(data->regmap, ABEOZ9S3_RTC_SEC_FIRST, regs,
++			       sizeof(regs));
++	if (ret) {
++		dev_err(dev, "%s: reading RTC time failed (%d)\n",
++			__func__, ret);
++		goto err;
++	}
++
++	tm->tm_sec = bcd2bin(regs[ABEOZ9S3_RTC_IDX_SC]);
++	tm->tm_min = bcd2bin(regs[ABEOZ9S3_RTC_IDX_MN]);
++
++	if (regs[ABEOZ9S3_RTC_IDX_HR] & ABEOZ9S3_REG_RTC_HR_12) { /* 12hr mode */
++		tm->tm_hour = bcd2bin(regs[ABEOZ9S3_RTC_IDX_HR] & 0x1f);
++		if (regs[ABEOZ9S3_RTC_IDX_HR] & ABEOZ9S3_REG_RTC_HR_PM) /* PM */
++			tm->tm_hour += 12;
++	} else {						/* 24hr mode */
++		tm->tm_hour = bcd2bin(regs[ABEOZ9S3_RTC_IDX_HR]);
++	}
++
++	tm->tm_mday = bcd2bin(regs[ABEOZ9S3_RTC_IDX_DT]);
++	tm->tm_wday = bcd2bin(regs[ABEOZ9S3_RTC_IDX_DW]);
++	tm->tm_mon  = bcd2bin(regs[ABEOZ9S3_RTC_IDX_MO]) - 1; /* starts at 1 */
++	tm->tm_year = bcd2bin(regs[ABEOZ9S3_RTC_IDX_YR]) + 100;
++
++	ret = rtc_valid_tm(tm);
++
++err:
++	return ret;
++}
++
++static int abeoz9s3_rtc_set_time(struct device *dev, struct rtc_time *tm)
++{
++	struct abeoz9s3_rtc_data *data = dev_get_drvdata(dev);
++	u8 regs[ABEOZ9S3_REG_RTC_SC + ABEOZ9S3_RTC_SEC_LEN];
++	int ret;
++
++	/*
++	 * Year register is 7-bit wide and bcd-coded, i.e records values
++	 * between 0 and 79. tm_year is an offset from 1900 and we are
++	 * interested in the 2000-2079 range, so any value less than 100
++	 * is invalid.
++	 */
++	if (tm->tm_year < 100)
++		return -EINVAL;
++
++	mutex_lock(&data->lock);
++
++	/* Stop the watch. */
++	ret = regmap_update_bits(data->regmap, ABEOZ9S3_REG_CTRL1,
++				 ABEOZ9S3_REG_CTRL1_WE, 0);
++	if (ret < 0) {
++		dev_err(dev, "%s: unable to stop watch (%d)\n",
++			__func__, ret);
++		goto err;
++	}
++
++	/* Set the time */
++	regs[ABEOZ9S3_REG_RTC_SC] = bin2bcd(tm->tm_sec);
++	regs[ABEOZ9S3_REG_RTC_MN] = bin2bcd(tm->tm_min);
++	regs[ABEOZ9S3_REG_RTC_HR] = bin2bcd(tm->tm_hour); /* 24-hour format */
++	regs[ABEOZ9S3_REG_RTC_DT] = bin2bcd(tm->tm_mday);
++	regs[ABEOZ9S3_REG_RTC_DW] = bin2bcd(tm->tm_wday);
++	regs[ABEOZ9S3_REG_RTC_MO] = bin2bcd(tm->tm_mon + 1);
++	regs[ABEOZ9S3_REG_RTC_YR] = bin2bcd(tm->tm_year - 100);
++
++	ret = regmap_bulk_write(data->regmap, ABEOZ9S3_REG_RTC_SC,
++				regs + ABEOZ9S3_REG_RTC_SC,
++				ABEOZ9S3_RTC_SEC_LEN);
++	if (ret < 0) {
++		dev_err(dev, "%s: unable to set time, watch stopped! (%d)\n",
++			__func__, ret);
++		goto err;
++	}
++
++	/* Re-enable the watch. */
++	ret = regmap_update_bits(data->regmap, ABEOZ9S3_REG_CTRL1,
++				 ABEOZ9S3_REG_CTRL1_WE, ABEOZ9S3_REG_CTRL1_WE);
++	if (ret < 0) {
++		dev_err(dev, "%s: unable to re-enable watch (%d)\n",
++			__func__, ret);
++		goto err;
++	}
++
++err:
++	mutex_unlock(&data->lock);
++	return ret;
++}
++
++/* Enable or disable battery low irq generation */
++static inline int _abeoz9s3_rtc_battery_low_irq_enable(struct regmap *regmap,
++						       bool enable)
++{
++	return regmap_update_bits(regmap, ABEOZ9S3_REG_CINT,
++				  ABEOZ9S3_REG_CINT_V1IE,
++				  enable ? ABEOZ9S3_REG_CINT_V1IE : 0);
++}
++
++/*
++ * Check current RTC status and enable/disable what needs to be. Return 0 if
++ * everything went ok and a negative value upon error. Note: this function
++ * is called early during init and hence does need mutex protection.
++ */
++static int abeoz9s3_rtc_check_setup(struct device *dev)
++{
++	struct abeoz9s3_rtc_data *data = dev_get_drvdata(dev);
++	struct regmap *regmap = data->regmap;
++	unsigned int reg;
++	int ret;
++	u8 mask;
++
++	/*
++	 * Disable timer, EEPROM refresh, and select CLKOUT function to CLKOUT,
++	 * enable self-recovery.
++	 */
++	mask = (ABEOZ9S3_REG_CTRL1_TE | ABEOZ9S3_REG_CTRL1_TAR |
++		ABEOZ9S3_REG_CTRL1_EERE | ABEOZ9S3_REG_CTRL1_SRON |
++		ABEOZ9S3_REG_CTRL1_CLKINT);
++	ret = regmap_update_bits(regmap, ABEOZ9S3_REG_CTRL1, mask,
++		ABEOZ9S3_REG_CTRL1_SRON | ABEOZ9S3_REG_CTRL1_CLKINT);
++	if (ret < 0) {
++		dev_err(dev, "%s: unable to initialize CTRL1 register (%d)\n",
++			__func__, ret);
++		return ret;
++	}
++
++	/*
++	 * Disable all interrupts.
++	 */
++	mask = (ABEOZ9S3_REG_CINT_AIE | ABEOZ9S3_REG_CINT_TIE |
++		ABEOZ9S3_REG_CINT_V1IE | ABEOZ9S3_REG_CINT_V2IE |
++		ABEOZ9S3_REG_CINT_SRIE);
++	ret = regmap_update_bits(regmap, ABEOZ9S3_REG_CINT, mask, 0);
++	if (ret < 0) {
++		dev_err(dev, "%s: unable to initialize CINT register (%d)\n",
++			__func__, ret);
++		return ret;
++	}
++
++	/*
++	 * Check battery low flag at startup: this allows reporting battery
++	 * is low at startup when IRQ line is not connected. Note: we record
++	 * current status to avoid reenabling this interrupt later in probe
++	 * function if battery is low.
++	 */
++	ret = regmap_read(regmap, ABEOZ9S3_REG_CINTF, &reg);
++	if (ret < 0) {
++		dev_err(dev, "%s: unable to read battery low flag (%d)\n",
++			__func__, ret);
++		return ret;
++	}
++
++	data->battery_low = reg & ABEOZ9S3_REG_CINTF_V1IF;
++	if (data->battery_low) {
++		dev_err(dev, "RTC battery is low; please, consider "
++			"changing it!\n");
++
++		ret = _abeoz9s3_rtc_battery_low_irq_enable(regmap, false);
++		if (ret)
++			dev_err(dev, "%s: disabling battery low interrupt "
++				"generation failed (%d)\n", __func__, ret);
++	}
++
++	return ret;
++}
++
++static irqreturn_t _abeoz9s3_rtc_interrupt(int irq, void *data)
++{
++	struct i2c_client *client = data;
++	struct device *dev = &client->dev;
++	struct abeoz9s3_rtc_data *rtc_data = dev_get_drvdata(dev);
++	unsigned int reg;
++	int ret, handled = IRQ_NONE;
++
++	ret = regmap_read(rtc_data->regmap, ABEOZ9S3_REG_CINTF, &reg);
++	if (ret < 0) {
++		dev_err(dev, "%s: unable to read interrupt status register (%d)!\n",
++			__func__, ret);
++		return handled;
++	}
++
++	/*
++	 * Check battery low detection flag and disable battery low interrupt
++	 * generation if flag is set (interrupt can only be cleared when
++	 * battery is replaced).
++	 */
++	if (reg & ABEOZ9S3_REG_CINTF_V1IF) {
++		dev_err(dev, "RTC battery is low; please change it!\n");
++
++		_abeoz9s3_rtc_battery_low_irq_enable(rtc_data->regmap, false);
++
++		handled = IRQ_HANDLED;
++	}
++
++	return handled;
++}
++
++static const struct rtc_class_ops rtc_ops = {
++	.read_time = _abeoz9s3_rtc_read_time,
++	.set_time = abeoz9s3_rtc_set_time,
++};
++
++static const struct regmap_config abeoz9s3_rtc_regmap_config = {
++	.reg_bits = 8,
++	.val_bits = 8,
++};
++
++static int abeoz9s3_probe(struct i2c_client *client,
++			  const struct i2c_device_id *id)
++{
++	struct abeoz9s3_rtc_data *data = NULL;
++	struct device *dev = &client->dev;
++	struct regmap *regmap;
++	int ret;
++
++	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C |
++				     I2C_FUNC_SMBUS_BYTE_DATA |
++				     I2C_FUNC_SMBUS_I2C_BLOCK)) {
++		ret = -ENODEV;
++		goto err;
++	}
++
++	regmap = devm_regmap_init_i2c(client, &abeoz9s3_rtc_regmap_config);
++	if (IS_ERR(regmap)) {
++		ret = PTR_ERR(regmap);
++		dev_err(dev, "%s: regmap allocation failed: %d\n",
++			__func__, ret);
++		goto err;
++	}
++
++	ret = abeoz9s3_i2c_validate_chip(regmap);
++	if (ret) {
++		dev_err(dev, "%s: chip is not abeoz9s3\n", __func__);
++		goto err;
++	}
++
++	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
++	if (!data) {
++		ret = -ENOMEM;
++		goto err;
++	}
++
++	mutex_init(&data->lock);
++	data->regmap = regmap;
++	dev_set_drvdata(dev, data);
++
++	ret = abeoz9s3_rtc_check_setup(dev);
++	if (ret)
++		goto err;
++
++	if (client->irq > 0) {
++		ret = devm_request_threaded_irq(dev, client->irq, NULL,
++						_abeoz9s3_rtc_interrupt,
++						IRQF_SHARED|IRQF_ONESHOT,
++						DRV_NAME, client);
++		if (!ret) {
++			device_init_wakeup(dev, true);
++			data->irq = client->irq;
++			dev_dbg(dev, "%s: irq %d used by RTC\n", __func__,
++				client->irq);
++		} else {
++			dev_err(dev, "%s: irq %d unavailable (%d)\n",
++				__func__, client->irq, ret);
++			goto err;
++		}
++	}
++
++	data->rtc = devm_rtc_device_register(dev, DRV_NAME, &rtc_ops,
++					     THIS_MODULE);
++	ret = PTR_ERR_OR_ZERO(data->rtc);
++	if (ret) {
++		dev_err(dev, "%s: unable to register RTC device (%d)\n",
++			__func__, ret);
++		goto err;
++	}
++
++	/* Enable battery low detection interrupt if battery not already low */
++	if (!data->battery_low && data->irq) {
++		ret = _abeoz9s3_rtc_battery_low_irq_enable(regmap, true);
++		if (ret) {
++			dev_err(dev, "%s: enabling battery low interrupt "
++				"generation failed (%d)\n", __func__, ret);
++			goto err;
++		}
++	}
++
++err:
++	if (ret && data && data->irq)
++		device_init_wakeup(dev, false);
++	return ret;
++}
++
++static int abeoz9s3_remove(struct i2c_client *client)
++{
++	struct abeoz9s3_rtc_data *rtc_data = dev_get_drvdata(&client->dev);
++
++	if (rtc_data->irq > 0)
++		device_init_wakeup(&client->dev, false);
++
++	return 0;
++}
++
++#ifdef CONFIG_PM_SLEEP
++static int abeoz9s3_rtc_suspend(struct device *dev)
++{
++	struct abeoz9s3_rtc_data *rtc_data = dev_get_drvdata(dev);
++
++	if (device_may_wakeup(dev))
++		return enable_irq_wake(rtc_data->irq);
++
++	return 0;
++}
++
++static int abeoz9s3_rtc_resume(struct device *dev)
++{
++	struct abeoz9s3_rtc_data *rtc_data = dev_get_drvdata(dev);
++
++	if (device_may_wakeup(dev))
++		return disable_irq_wake(rtc_data->irq);
++
++	return 0;
++}
++#endif
++
++static SIMPLE_DEV_PM_OPS(abeoz9s3_rtc_pm_ops, abeoz9s3_rtc_suspend,
++			 abeoz9s3_rtc_resume);
++
++#ifdef CONFIG_OF
++static const struct of_device_id abeoz9s3_dt_match[] = {
++	{ .compatible = "abracon,abeoz9s3" },
++	{ },
++};
++#endif
++
++static const struct i2c_device_id abeoz9s3_id[] = {
++	{ "abeoz9s3", 0 },
++	{ }
++};
++MODULE_DEVICE_TABLE(i2c, abeoz9s3_id);
++
++static struct i2c_driver abeoz9s3_driver = {
++	.driver = {
++		.name = DRV_NAME,
++		.owner = THIS_MODULE,
++		.pm = &abeoz9s3_rtc_pm_ops,
++		.of_match_table = of_match_ptr(abeoz9s3_dt_match),
++	},
++	.probe	  = abeoz9s3_probe,
++	.remove	  = abeoz9s3_remove,
++	.id_table = abeoz9s3_id,
++};
++module_i2c_driver(abeoz9s3_driver);
++
++MODULE_AUTHOR("Petr KUBIZNAK <kubiznak.petr@elnico.cz>");
++MODULE_DESCRIPTION("Abracon AB-RTCMC-32.768kHz-EOZ9-S3 RTC/Alarm driver");
++MODULE_LICENSE("GPL");

@@ -2,6 +2,7 @@ FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}:"
 
 SRC_URI += "file://0001-touchscreen-CRTOUCH-driver-ported-from.patch \
             file://rpmsg_sysfs_interface.patch \
+            file://rtc-ab-eoz9-s3.patch \
             file://defconfig \
             file://sqm4sx6.dtsi \
             file://sqm4sx6-eb.dtsi \
