@@ -136,6 +136,15 @@
 			};
 		};
 	};
+
+	rtcmc: abb5zes3@56 {
+		compatible = "abracon,abeoz9s3";
+		reg = <0x56>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_rtcmc>;
+		interrupt-parent = <&gpio2>;
+		interrupts = <16>;
+	};
 };
 
 &wdog1 {
@@ -363,6 +372,12 @@
 				MX6SX_PAD_QSPI1A_DATA3__QSPI1_A_DATA_3  0x70a1
 				MX6SX_PAD_QSPI1A_SCLK__QSPI1_A_SCLK     0x70a1
 				MX6SX_PAD_QSPI1A_SS0_B__QSPI1_A_SS0_B   0x70a1
+			>;
+		};
+
+		pinctrl_rtcmc: rtcmcgrp {
+			fsl,pins = <
+				MX6SX_PAD_KEY_ROW1__GPIO2_IO_16		0x17059
 			>;
 		};
 
