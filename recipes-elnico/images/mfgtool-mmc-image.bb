@@ -14,6 +14,7 @@ IMAGE_INSTALL += " \
     packagegroup-fsl-mfgtool-mtd \
     packagegroup-fsl-mfgtool-extfs \
     packagegroup-core-ssh-openssh \
+    ntpdate \
 "
 
 UBOOT_CONFIG = "mfgtool"

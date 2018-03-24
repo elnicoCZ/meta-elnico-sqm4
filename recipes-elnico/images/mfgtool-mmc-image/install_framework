@@ -89,13 +89,22 @@ mtd_mount_ubi() {
 # Terminates script execution with a result message
 # $1: Script return value (0=success, else failure)
 quit() {             
-        echo "---------------"                           
-        [ $1 -eq 0 ] && echo "--- SUCCESS ---" || echo "--- FAILURE ---"
-        echo "---------------"                           
-                                                         
-        # beep                                              
-        echo -ne \\07                                       
-                                                            
-        exit $1                                             
+	echo "---------------"                           
+	[ $1 -eq 0 ] && echo "--- SUCCESS ---" || echo "--- FAILURE ---"
+	echo "---------------"                           
+
+	# beep                                              
+	echo -ne \\07                                       
+
+	exit $1                                             
 }                                                           
 
+logi() {
+	echo "- INFO - " $@
+}
+logw() {
+	echo "- WARNING - " $@
+}
+loge() {
+	echo "- ERROR - " $@
+}
