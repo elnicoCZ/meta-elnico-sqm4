@@ -1,0 +1,133 @@
+Credits: David Patton (see https://community.nxp.com/thread/461521)
+--- a/drivers/char/imx_amp/imx_sema4.c	2018-06-18 14:40:54.743023384 -0500
++++ b/drivers/char/imx_amp/imx_sema4.c	2018-07-09 15:22:14.439765673 -0500
+@@ -131,12 +131,7 @@
+ 	mutex_ptr->gate_val &= SEMA4_GATE_MASK;
+ 	/* Check to see if this core already own it */
+ 	if (mutex_ptr->gate_val == SEMA4_A9_LOCK) {
++		mutex_ptr->count++;
+-		/* return -EBUSY, invoker should be in sleep, and re-lock ag */
+-		pr_err("%s -> %s %d already locked, wait! num %d val %d.\n",
+-				__FILE__, __func__, __LINE__,
+-				i, mutex_ptr->gate_val);
+-		ret = -EBUSY;
+-		goto out;
+ 	} else {
+ 		/* try to lock the mutex */
+ 		mutex_ptr->gate_val = readb(imx6_sema4->ioaddr + i);
+@@ -145,14 +140,18 @@
+ 		writeb(mutex_ptr->gate_val, imx6_sema4->ioaddr + i);
+ 		mutex_ptr->gate_val = readb(imx6_sema4->ioaddr + i);
+ 		mutex_ptr->gate_val &= SEMA4_GATE_MASK;
++		/* double check the mutex is locked by this core, otherwise, return -EBUSY */
++		if (mutex_ptr->gate_val == SEMA4_A9_LOCK) {
++			mutex_ptr->count++;
++		} else {
++			pr_debug("%s() - wait-locked num %d val %d.\n", 
++					__func__, i, mutex_ptr->gate_val);
+-		/* double check the mutex is locked, otherwise, return -EBUSY */
+-		if (mutex_ptr->gate_val != SEMA4_A9_LOCK) {
+-			pr_debug("wait-locked num %d val %d.\n",
+-					i, mutex_ptr->gate_val);
+ 			ret = -EBUSY;
+ 		}
+ 	}
++	if (mutex_ptr->count > 1) {
++		pr_debug("%s() - count = %d.\n", __func__, mutex_ptr->count);
++	}
+-out:
+ 	return ret;
+ }
+ 
+@@ -173,8 +172,11 @@
+ int imx_sema4_mutex_trylock(struct imx_sema4_mutex *mutex_ptr)
+ {
+ 	int ret = 0;
++	unsigned long flags = 0;
+ 
++	spin_lock_irqsave(&imx6_sema4->lock, flags);
+ 	ret = _imx_sema4_mutex_lock(mutex_ptr);
++	spin_unlock_irqrestore(&imx6_sema4->lock, flags);
+ 	if (ret == 0)
+ 		return SEMA4_A9_LOCK;
+ 	else
+@@ -209,11 +211,10 @@
+ 	ret = _imx_sema4_mutex_lock(mutex_ptr);
+ 	spin_unlock_irqrestore(&imx6_sema4->lock, flags);
+ 	while (-EBUSY == ret) {
++		/* SLEEP HERE */
+ 		spin_lock_irqsave(&imx6_sema4->lock, flags);
+ 		ret = _imx_sema4_mutex_lock(mutex_ptr);
+ 		spin_unlock_irqrestore(&imx6_sema4->lock, flags);
+-		if (ret == 0)
+-			break;
+ 	}
+ 
+ 	return ret;
+@@ -236,30 +237,43 @@
+ int imx_sema4_mutex_unlock(struct imx_sema4_mutex *mutex_ptr)
+ {
+ 	int ret = 0, i = 0;
++	unsigned long flags;
+ 
+ 	if ((mutex_ptr == NULL) || (mutex_ptr->valid != CORE_MUTEX_VALID))
+ 		return -EINVAL;
+ 
++	spin_lock_irqsave(&imx6_sema4->lock, flags);
+ 	i = mutex_ptr->gate_num;
+ 	mutex_ptr->gate_val = readb(imx6_sema4->ioaddr + i);
+ 	mutex_ptr->gate_val &= SEMA4_GATE_MASK;
++	mutex_ptr->count--;
++	if (mutex_ptr->count < 0) {
++		pr_err("%s() - ERROR, count = %d, resetting to 0.\n", __func__, mutex_ptr->count);
++		mutex_ptr->count = 0;
++	}
+ 	/* make sure it is locked by this core */
++	if (mutex_ptr->gate_val == SEMA4_A9_LOCK) {
++		/* only release it when everyone on this core is done */
++		if (mutex_ptr->count == 0) {
++			/* unlock it */
++			mutex_ptr->gate_val = readb(imx6_sema4->ioaddr + i);
++			mutex_ptr->gate_val &= (~SEMA4_GATE_MASK);
++			writeb(mutex_ptr->gate_val | SEMA4_UNLOCK, imx6_sema4->ioaddr + i);
++			mutex_ptr->gate_val = readb(imx6_sema4->ioaddr + i);
++			mutex_ptr->gate_val &= SEMA4_GATE_MASK;
++			/* report an error if it is still locked by this core */
++			if (mutex_ptr->gate_val == SEMA4_A9_LOCK) {
++				pr_err("%s() - ERROR, failed to unlock the mutex.\n", __func__);
++			}
++		} else {
++			pr_err("%s() - count = %d.\n", __func__, mutex_ptr->count);
++		}
++	} else {
++		pr_err("%s() - ERROR, trying to unlock an unlocked mutex.\n", __func__);
+-	if (mutex_ptr->gate_val != SEMA4_A9_LOCK) {
+-		pr_err("%d Trying to unlock an unlock mutex.\n", __LINE__);
+ 		ret = -EINVAL;
+-		goto out;
+ 	}
+-	/* unlock it */
+-	mutex_ptr->gate_val = readb(imx6_sema4->ioaddr + i);
+-	mutex_ptr->gate_val &= (~SEMA4_GATE_MASK);
+-	writeb(mutex_ptr->gate_val | SEMA4_UNLOCK, imx6_sema4->ioaddr + i);
+-	mutex_ptr->gate_val = readb(imx6_sema4->ioaddr + i);
+-	mutex_ptr->gate_val &= SEMA4_GATE_MASK;
+-	/* make sure it is locked by this core */
+-	if (mutex_ptr->gate_val == SEMA4_A9_LOCK)
+-		pr_err("%d ERROR, failed to unlock the mutex.\n", __LINE__);
+ 
++	spin_unlock_irqrestore(&imx6_sema4->lock, flags);
+-out:
+ 	return ret;
+ }
+ EXPORT_SYMBOL(imx_sema4_mutex_unlock);
+--- a/include/linux/imx_sema4.h	2018-06-18 14:41:53.887021637 -0500
++++ b/include/linux/imx_sema4.h	2018-06-18 14:41:34.807022201 -0500
+@@ -39,6 +39,7 @@
+ struct imx_sema4_mutex {
+ 	u32			valid;
+ 	u32			gate_num;
++	int			count;
+ 	unsigned char		gate_val;
+ 	wait_queue_head_t       wait_q;
+ };
