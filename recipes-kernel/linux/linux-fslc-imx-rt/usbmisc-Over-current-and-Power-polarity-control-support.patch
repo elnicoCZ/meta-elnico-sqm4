@@ -1,0 +1,97 @@
+From 5d47ad334364964c45e4068147e057051417de9f Mon Sep 17 00:00:00 2001
+From: Petr Kubiznak <kubiznak.petr@elnico.cz>
+Date: Sat, 22 Aug 2020 22:02:03 +0200
+Subject: [PATCH] usbmisc: Over-current and Power polarity control support
+ added
+
+There were no means to control the values of the
+USBNC_USB_OTGx_CTRL.OVER_CUR_POL and USBNC_USB_OTGx_CTRL.PWR_POL registers.
+
+For OC, the default polarity (0) is active high. Using new
+"over-current-active-low" device-tree option changes the OC polarity
+to 1, i.e. active low.
+
+For PWR, the default polarity (0) is active low. Using new
+"power-active-high" device-tree option changes the PWR polarity
+to 1, i.e. active high.
+
+Signed-off-by: Petr Kubiznak <kubiznak.petr@elnico.cz>
+---
+ drivers/usb/chipidea/ci_hdrc_imx.c |  6 ++++++
+ drivers/usb/chipidea/ci_hdrc_imx.h |  2 ++
+ drivers/usb/chipidea/usbmisc_imx.c | 18 +++++++++++++++---
+ 3 files changed, 23 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/usb/chipidea/ci_hdrc_imx.c b/drivers/usb/chipidea/ci_hdrc_imx.c
+index d2898ec1b876..a6c623896e8d 100644
+--- a/drivers/usb/chipidea/ci_hdrc_imx.c
++++ b/drivers/usb/chipidea/ci_hdrc_imx.c
+@@ -187,6 +187,12 @@ static struct imx_usbmisc_data *usbmisc_get_init_data(struct device *dev)
+ 	if (of_find_property(np, "disable-over-current", NULL))
+ 		data->disable_oc = 1;
+ 
++	if (of_find_property(np, "over-current-active-low", NULL))
++		data->pol_oc = 1;
++
++	if (of_find_property(np, "power-active-high", NULL))
++		data->pol_pwr = 1;
++
+ 	if (of_find_property(np, "external-vbus-divider", NULL))
+ 		data->evdo = 1;
+ 
+diff --git a/drivers/usb/chipidea/ci_hdrc_imx.h b/drivers/usb/chipidea/ci_hdrc_imx.h
+index bdcf1b724abe..4caeb0849709 100644
+--- a/drivers/usb/chipidea/ci_hdrc_imx.h
++++ b/drivers/usb/chipidea/ci_hdrc_imx.h
+@@ -45,6 +45,8 @@ struct imx_usbmisc_data {
+ 	struct usb_charger *charger;
+ 
+ 	unsigned int disable_oc:1; /* over current detect disabled */
++	unsigned int pol_oc:1; /* over current polarity */
++	unsigned int pol_pwr:1; /* power polarity */
+ 	unsigned int evdo:1; /* set external vbus divider option */
+ 	/*
+ 	 * Specifies the delay between powering up the xtal 24MHz clock
+diff --git a/drivers/usb/chipidea/usbmisc_imx.c b/drivers/usb/chipidea/usbmisc_imx.c
+index e62fc732e86c..feecbad5f33c 100644
+--- a/drivers/usb/chipidea/usbmisc_imx.c
++++ b/drivers/usb/chipidea/usbmisc_imx.c
+@@ -58,6 +58,8 @@
+ 
+ #define MX6_BM_NON_BURST_SETTING	BIT(1)
+ #define MX6_BM_OVER_CUR_DIS		BIT(7)
++#define MX6_BM_OVER_CUR_POL		BIT(8)
++#define MX6_BM_PWR_POL			BIT(9)
+ #define MX6_BM_WAKEUP_ENABLE		BIT(10)
+ #define MX6_BM_UTMI_ON_CLOCK		BIT(13)
+ #define MX6_BM_ID_WAKEUP		BIT(16)
+@@ -442,13 +444,23 @@ static int usbmisc_imx6sx_init(struct imx_usbmisc_data *data)
+ 		/* Set vbus wakeup source as bvalid */
+ 		val = readl(reg);
+ 		writel(val | MX6SX_USB_VBUS_WAKEUP_SOURCE_BVALID, reg);
++
++		reg = usbmisc->base + data->index * 4;
+ 		/*
+ 		 * Disable dp/dm wakeup in device mode when vbus is
+ 		 * not there.
+ 		 */
+-		val = readl(usbmisc->base + data->index * 4);
+-		writel(val & ~MX6SX_BM_DPDM_WAKEUP_EN,
+-			usbmisc->base + data->index * 4);
++		val = readl(reg);
++		val &= ~MX6SX_BM_DPDM_WAKEUP_EN;
++		/* over-current polarity */
++		if (data->pol_oc) {
++			val |= MX6_BM_OVER_CUR_POL;
++		}
++		/* power polarity */
++		if (data->pol_pwr) {
++			val |= MX6_BM_PWR_POL;
++		}
++		writel(val, reg);
+ 	}
+ 
+ 	/* For HSIC controller */
+-- 
+2.11.0
+
