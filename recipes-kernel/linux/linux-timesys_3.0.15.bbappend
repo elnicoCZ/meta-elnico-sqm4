@@ -14,7 +14,8 @@ SRC_URI += "file://defconfig \
             file://0014-flexcan-Driver-fixed-and-added-support-for-flexcan0-.patch \
             file://0015-dspi-Driver-generalized-for-all-SPI-channels-DMA-clo.patch \
             file://0016-DCU-FRD070IF40-display-support-added.-Other-FRDxx-di.patch \
+            file://0017-tsc2007-Touchscreen-driver-fixed-and-enabled-for-the.patch \
 "
 
-PR = "r6"
+PR = "r7"
 
