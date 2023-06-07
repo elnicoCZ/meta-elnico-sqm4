@@ -156,6 +156,7 @@
 &usdhc4 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usdhc4_4>;
-	cd-gpios = <&gpio6 21 GPIO_ACTIVE_LOW>;
+	/* cd-gpios = <&gpio6 21 GPIO_ACTIVE_LOW>; */
+	non-removable;
 	status = "okay";
 };
