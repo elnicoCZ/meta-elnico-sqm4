@@ -6,7 +6,7 @@ PR = "r0"
 
 RDEPENDS_${PN} = "coreutils"
 
-SRC_URI = "git://github.com/elnicoCZ/eupdate.git"
+SRC_URI = "git://github.com/elnicoCZ/eupdate.git;protocol=https"
 SRCREV = "450ac2fc5f91705d84f7522f550dd506a59e2a0e"
 
 S = "${WORKDIR}/git"
