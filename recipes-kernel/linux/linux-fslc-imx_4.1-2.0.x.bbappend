@@ -1,5 +1,7 @@
 FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}:"
 
+include linux-fslc-fix.inc
+
 SRC_URI += "file://0001-touchscreen-CRTOUCH-driver-ported-from.patch \
             file://imx_sema4.patch \
             file://rpmsg_sysfs_interface.patch \
